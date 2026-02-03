@@ -4,29 +4,50 @@ set -e
 CONFIG_DIR="/data/openclaw/.openclaw"
 CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 
-# Ensure state directories exist (Azure File share mounts can be empty)
+# Ensure state directories exist
 mkdir -p "$CONFIG_DIR/workspace" "$CONFIG_DIR/logs" "$CONFIG_DIR/agents" "$CONFIG_DIR/credentials" "$CONFIG_DIR/telegram"
 
-BOT_NAME="@mo2darkbot"
-BOT_TOKEN="${TELEGRAM_BOT_TOKEN_DEFAULT}"
+# Bot tokens from environment
+BOT_TOKEN_DEFAULT="${TELEGRAM_BOT_TOKEN_DEFAULT}"
+BOT_TOKEN_MO2DRKBOT="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
 
 GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-change-me}"
-TELEGRAM_WEBHOOK_URL="${TELEGRAM_WEBHOOK_URL:-}"
-TELEGRAM_WEBHOOK_SECRET="${TELEGRAM_WEBHOOK_SECRET:-}"
-if [ -z "${TELEGRAM_WEBHOOK_URL}" ]; then
-  echo "TELEGRAM_WEBHOOK_URL is required for webhook mode" >&2
-  exit 1
-fi
-if [ -z "${TELEGRAM_WEBHOOK_SECRET}" ]; then
-  echo "TELEGRAM_WEBHOOK_SECRET is required for webhook mode" >&2
-  exit 1
-fi
-if [ -z "${BOT_TOKEN}" ]; then
-  echo "TELEGRAM_BOT_TOKEN_DEFAULT (or TELEGRAM_BOT_TOKEN_MO2DRKBOT) is required" >&2
+
+# Validate at least one bot token is provided
+if [ -z "${BOT_TOKEN_DEFAULT}" ] && [ -z "${BOT_TOKEN_MO2DRKBOT}" ]; then
+  echo "At least one Telegram bot token is required (TELEGRAM_BOT_TOKEN_DEFAULT or TELEGRAM_BOT_TOKEN_MO2DRKBOT)" >&2
   exit 1
 fi
 
-# Create config from environment variables
+# Build accounts JSON based on available tokens
+ACCOUNTS_JSON=""
+if [ -n "${BOT_TOKEN_DEFAULT}" ]; then
+  ACCOUNTS_JSON="\"default\": {
+          \"name\": \"@mo2darkbot\",
+          \"enabled\": true,
+          \"botToken\": \"${BOT_TOKEN_DEFAULT}\",
+          \"dmPolicy\": \"open\",
+          \"allowFrom\": [\"*\"],
+          \"dms\": {\"7091381625\": {}}
+        }"
+fi
+
+if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then
+  if [ -n "${ACCOUNTS_JSON}" ]; then
+    ACCOUNTS_JSON="${ACCOUNTS_JSON},"
+  fi
+  ACCOUNTS_JSON="${ACCOUNTS_JSON}
+        \"mo2drkbot\": {
+          \"name\": \"@mo2drkbot\",
+          \"enabled\": true,
+          \"botToken\": \"${BOT_TOKEN_MO2DRKBOT}\",
+          \"dmPolicy\": \"open\",
+          \"allowFrom\": [\"*\"],
+          \"dms\": {\"7091381625\": {}}
+        }"
+fi
+
+# Create config from environment variables - POLLING MODE (no webhook)
 cat > "$CONFIG_FILE" << EOF
 {
   "meta": {
@@ -43,7 +64,7 @@ cat > "$CONFIG_FILE" << EOF
     "mode": "merge",
     "providers": {
       "azure-gpt4o": {
-        "baseUrl": "${AZURE_OPENAI_ENDPOINT}/openai/v1",
+        "baseUrl": "${AZURE_OPENAI_ENDPOINT}openai/v1",
         "apiKey": "${AZURE_OPENAI_API_KEY}",
         "auth": "api-key",
         "api": "openai-completions",
@@ -77,27 +98,19 @@ cat > "$CONFIG_FILE" << EOF
   "channels": {
     "telegram": {
       "enabled": true,
-      "webhookUrl": "${TELEGRAM_WEBHOOK_URL}",
-      "webhookSecret": "${TELEGRAM_WEBHOOK_SECRET}",
       "dmPolicy": "open",
       "allowFrom": ["*"],
       "groupPolicy": "allowlist",
       "streamMode": "off",
       "accounts": {
-        "default": {
-          "name": "${BOT_NAME}",
-          "enabled": true,
-          "botToken": "${BOT_TOKEN}",
-          "dmPolicy": "open",
-          "allowFrom": ["*"]
-        }
+        ${ACCOUNTS_JSON}
       }
     }
   },
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "loopback",
+    "bind": "0.0.0.0",
     "auth": {
       "mode": "token",
       "token": "${GATEWAY_TOKEN}"
@@ -112,6 +125,7 @@ cat > "$CONFIG_FILE" << EOF
 EOF
 
 echo "OpenClaw config generated at $CONFIG_FILE"
+cat "$CONFIG_FILE"
 
 # Start OpenClaw gateway
 exec openclaw gateway run --bind 0.0.0.0 --port 18789
