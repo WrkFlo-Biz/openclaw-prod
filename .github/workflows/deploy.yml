@@ -55,8 +55,12 @@ jobs:
               AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }} \
               TELEGRAM_BOT_TOKEN_DEFAULT=${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }} \
               TELEGRAM_BOT_TOKEN_MO2DRKBOT=${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }} \
+              TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }} \
+              TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }} \
               OPENCLAW_GATEWAY_TOKEN=${{ secrets.OPENCLAW_GATEWAY_TOKEN }} \
             --azure-file-volume-account-name ${{ secrets.OPENCLAW_STORAGE_ACCOUNT }} \
             --azure-file-volume-account-key ${{ secrets.OPENCLAW_STORAGE_KEY }} \
             --azure-file-volume-share-name ${{ secrets.OPENCLAW_FILE_SHARE }} \
-            --azure-file-volume-mount-path /data/openclaw
+            --azure-file-volume-mount-path /data/openclaw \
+            --ip-address Public \
+            --ports 8787

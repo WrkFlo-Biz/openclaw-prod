@@ -13,6 +13,16 @@ if [ -n "${TELEGRAM_BOT_TOKEN_MO2DRKBOT}" ]; then
 fi
 
 GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-change-me}"
+TELEGRAM_WEBHOOK_URL="${TELEGRAM_WEBHOOK_URL:-}"
+TELEGRAM_WEBHOOK_SECRET="${TELEGRAM_WEBHOOK_SECRET:-}"
+TELEGRAM_WEBHOOK_BLOCK=""
+if [ -n "${TELEGRAM_WEBHOOK_URL}" ]; then
+  if [ -z "${TELEGRAM_WEBHOOK_SECRET}" ]; then
+    echo "TELEGRAM_WEBHOOK_URL set but TELEGRAM_WEBHOOK_SECRET is missing" >&2
+    exit 1
+  fi
+  TELEGRAM_WEBHOOK_BLOCK="      \\\"webhookUrl\\\": \\\"${TELEGRAM_WEBHOOK_URL}\\\",\\n      \\\"webhookSecret\\\": \\\"${TELEGRAM_WEBHOOK_SECRET}\\\",\\n"
+fi
 
 # Create config from environment variables
 cat > "$CONFIG_FILE" << EOF
@@ -65,6 +75,7 @@ cat > "$CONFIG_FILE" << EOF
   "channels": {
     "telegram": {
       "enabled": true,
+${TELEGRAM_WEBHOOK_BLOCK}
       "dmPolicy": "open",
       "allowFrom": ["*"],
       "groupPolicy": "allowlist",

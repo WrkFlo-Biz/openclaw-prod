@@ -46,11 +46,15 @@ az container create \
     AZURE_OPENAI_API_KEY=<key> \
     TELEGRAM_BOT_TOKEN_DEFAULT=<token> \
     TELEGRAM_BOT_TOKEN_MO2DRKBOT=<token> \
+    TELEGRAM_WEBHOOK_URL=<public-https-url> \
+    TELEGRAM_WEBHOOK_SECRET=<secret> \
     OPENCLAW_GATEWAY_TOKEN=<token> \
   --azure-file-volume-account-name <storage-account> \
   --azure-file-volume-account-key <storage-key> \
   --azure-file-volume-share-name <file-share> \
-  --azure-file-volume-mount-path /data/openclaw
+  --azure-file-volume-mount-path /data/openclaw \
+  --ip-address Public \
+  --ports 8787
 ```
 
 ## Environment Variables
@@ -62,6 +66,8 @@ az container create \
 | AZURE_OPENAI_DEPLOYMENT | Yes | Model deployment name (e.g., gpt-4o) |
 | TELEGRAM_BOT_TOKEN_DEFAULT | Yes | Primary Telegram bot token |
 | TELEGRAM_BOT_TOKEN_MO2DRKBOT | No | Secondary Telegram bot token |
+| TELEGRAM_WEBHOOK_URL | Yes (webhook mode) | Public HTTPS webhook URL |
+| TELEGRAM_WEBHOOK_SECRET | Yes (webhook mode) | Webhook secret (8-256 chars) |
 | OPENCLAW_GATEWAY_TOKEN | Yes | Gateway auth token |
 
 ## Architecture
