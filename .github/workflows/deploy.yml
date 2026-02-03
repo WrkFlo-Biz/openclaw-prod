@@ -4,12 +4,22 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      imageTag:
+        description: "Image tag to deploy (e.g., v5). Leave empty to use commit SHA."
+        required: false
+        default: ""
+      skipBuild:
+        description: "Skip build/push and only deploy the specified image tag."
+        required: false
+        default: "false"
 
 env:
   AZURE_CONTAINER_REGISTRY: wrkfloopenclawacr
   RESOURCE_GROUP: openclaw-rg
   CONTAINER_GROUP_NAME: openclaw-aci
   CONTAINER_IMAGE: openclaw
+  IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.imageTag || github.sha }}
 
 jobs:
   build-and-deploy:
@@ -33,6 +43,7 @@ jobs:
             --password ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Docker image
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skipBuild != 'true' }}
         run: |
           docker buildx build --platform linux/amd64 -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ github.sha }} --push .
           docker buildx build --platform linux/amd64 -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:latest --push .
@@ -45,7 +56,7 @@ jobs:
           az container create \
             --name ${{ env.CONTAINER_GROUP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ github.sha }} \
+            --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }} \
             --os-type Linux \
             --restart-policy Always \
             --cpu 1 --memory 2 \
