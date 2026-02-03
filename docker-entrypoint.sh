@@ -4,6 +4,16 @@ set -e
 CONFIG_DIR="/data/openclaw/.openclaw"
 CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 
+# Ensure state directories exist (Azure File share mounts can be empty)
+mkdir -p "$CONFIG_DIR/workspace" "$CONFIG_DIR/logs" "$CONFIG_DIR/agents" "$CONFIG_DIR/credentials" "$CONFIG_DIR/telegram"
+
+MO2DRK_ENABLED=false
+if [ -n "${TELEGRAM_BOT_TOKEN_MO2DRKBOT}" ]; then
+  MO2DRK_ENABLED=true
+fi
+
+GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-change-me}"
+
 # Create config from environment variables
 cat > "$CONFIG_FILE" << EOF
 {
@@ -69,7 +79,7 @@ cat > "$CONFIG_FILE" << EOF
         },
         "mo2drkbot": {
           "name": "@mo2drkbot",
-          "enabled": ${TELEGRAM_BOT_TOKEN_MO2DRKBOT:+true}${TELEGRAM_BOT_TOKEN_MO2DRKBOT:-false},
+          "enabled": ${MO2DRK_ENABLED},
           "botToken": "${TELEGRAM_BOT_TOKEN_MO2DRKBOT:-}",
           "dmPolicy": "open",
           "allowFrom": ["*"]
@@ -80,7 +90,11 @@ cat > "$CONFIG_FILE" << EOF
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "0.0.0.0"
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "${GATEWAY_TOKEN}"
+    }
   },
   "plugins": {
     "entries": {

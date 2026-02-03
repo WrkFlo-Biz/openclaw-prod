@@ -3,8 +3,8 @@ FROM node:22-slim
 LABEL maintainer="mo2dark"
 LABEL description="OpenClaw Production Container"
 
-# Install curl for healthcheck and OpenClaw
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* \
+# Install curl, git for healthcheck and OpenClaw
+RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/* \
     && npm install -g openclaw@latest
 
 # Create app directory
