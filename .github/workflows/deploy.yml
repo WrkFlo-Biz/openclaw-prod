@@ -7,9 +7,9 @@ on:
 
 env:
   AZURE_CONTAINER_REGISTRY: openclawacr
-  CONTAINER_NAME: openclaw
   RESOURCE_GROUP: openclaw-rg
-  CONTAINER_APP_NAME: openclaw-app
+  CONTAINER_GROUP_NAME: openclaw-aci
+  CONTAINER_IMAGE: openclaw
 
 jobs:
   build-and-deploy:
@@ -30,15 +30,33 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }} .
-          docker tag ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }} \
-                     ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
-          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }}
-          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:latest
+          docker buildx build --platform linux/amd64 -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ github.sha }} --push .
+          docker buildx build --platform linux/amd64 -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:latest --push .
 
-      - name: Deploy to Azure Container Apps
+      - name: Deploy to Azure Container Instances
         run: |
-          az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
+          az container delete --yes \
+            --name ${{ env.CONTAINER_GROUP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} || true
+          az container create \
+            --name ${{ env.CONTAINER_GROUP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }}
+            --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ github.sha }} \
+            --os-type Linux \
+            --restart-policy Always \
+            --cpu 1 --memory 2 \
+            --registry-username ${{ secrets.ACR_USERNAME }} \
+            --registry-password ${{ secrets.ACR_PASSWORD }} \
+            --environment-variables \
+              AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }} \
+              AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }} \
+              AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }} \
+            --secure-environment-variables \
+              AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }} \
+              TELEGRAM_BOT_TOKEN_DEFAULT=${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }} \
+              TELEGRAM_BOT_TOKEN_MO2DRKBOT=${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }} \
+              OPENCLAW_GATEWAY_TOKEN=${{ secrets.OPENCLAW_GATEWAY_TOKEN }} \
+            --azure-file-volume-account-name ${{ secrets.OPENCLAW_STORAGE_ACCOUNT }} \
+            --azure-file-volume-account-key ${{ secrets.OPENCLAW_STORAGE_KEY }} \
+            --azure-file-volume-share-name ${{ secrets.OPENCLAW_FILE_SHARE }} \
+            --azure-file-volume-mount-path /data/openclaw
