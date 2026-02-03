@@ -5,7 +5,11 @@ LABEL description="OpenClaw Production Container"
 
 # Install curl, git for healthcheck and OpenClaw
 RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/* \
-    && npm install -g openclaw@latest
+    && npm install -g openclaw@latest pnpm
+
+# Install Lobster workflow engine
+RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
+    && cd /opt/lobster && pnpm install && pnpm build && npm link
 
 # Create app directory
 WORKDIR /data/openclaw
