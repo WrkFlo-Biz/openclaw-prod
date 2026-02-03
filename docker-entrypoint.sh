@@ -7,21 +7,27 @@ CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 # Ensure state directories exist (Azure File share mounts can be empty)
 mkdir -p "$CONFIG_DIR/workspace" "$CONFIG_DIR/logs" "$CONFIG_DIR/agents" "$CONFIG_DIR/credentials" "$CONFIG_DIR/telegram"
 
-MO2DRK_ENABLED=false
+BOT_NAME="@mo2darkbot"
+BOT_TOKEN="${TELEGRAM_BOT_TOKEN_DEFAULT}"
 if [ -n "${TELEGRAM_BOT_TOKEN_MO2DRKBOT}" ]; then
-  MO2DRK_ENABLED=true
+  BOT_NAME="@mo2drkbot"
+  BOT_TOKEN="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
 fi
 
 GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-change-me}"
 TELEGRAM_WEBHOOK_URL="${TELEGRAM_WEBHOOK_URL:-}"
 TELEGRAM_WEBHOOK_SECRET="${TELEGRAM_WEBHOOK_SECRET:-}"
-TELEGRAM_WEBHOOK_BLOCK=""
-if [ -n "${TELEGRAM_WEBHOOK_URL}" ]; then
-  if [ -z "${TELEGRAM_WEBHOOK_SECRET}" ]; then
-    echo "TELEGRAM_WEBHOOK_URL set but TELEGRAM_WEBHOOK_SECRET is missing" >&2
-    exit 1
-  fi
-  TELEGRAM_WEBHOOK_BLOCK="      \\\"webhookUrl\\\": \\\"${TELEGRAM_WEBHOOK_URL}\\\",\\n      \\\"webhookSecret\\\": \\\"${TELEGRAM_WEBHOOK_SECRET}\\\",\\n"
+if [ -z "${TELEGRAM_WEBHOOK_URL}" ]; then
+  echo "TELEGRAM_WEBHOOK_URL is required for webhook mode" >&2
+  exit 1
+fi
+if [ -z "${TELEGRAM_WEBHOOK_SECRET}" ]; then
+  echo "TELEGRAM_WEBHOOK_SECRET is required for webhook mode" >&2
+  exit 1
+fi
+if [ -z "${BOT_TOKEN}" ]; then
+  echo "TELEGRAM_BOT_TOKEN_DEFAULT (or TELEGRAM_BOT_TOKEN_MO2DRKBOT) is required" >&2
+  exit 1
 fi
 
 # Create config from environment variables
@@ -75,23 +81,17 @@ cat > "$CONFIG_FILE" << EOF
   "channels": {
     "telegram": {
       "enabled": true,
-${TELEGRAM_WEBHOOK_BLOCK}
+      "webhookUrl": "${TELEGRAM_WEBHOOK_URL}",
+      "webhookSecret": "${TELEGRAM_WEBHOOK_SECRET}",
       "dmPolicy": "open",
       "allowFrom": ["*"],
       "groupPolicy": "allowlist",
       "streamMode": "off",
       "accounts": {
         "default": {
-          "name": "@mo2darkbot",
+          "name": "${BOT_NAME}",
           "enabled": true,
-          "botToken": "${TELEGRAM_BOT_TOKEN_DEFAULT}",
-          "dmPolicy": "open",
-          "allowFrom": ["*"]
-        },
-        "mo2drkbot": {
-          "name": "@mo2drkbot",
-          "enabled": ${MO2DRK_ENABLED},
-          "botToken": "${TELEGRAM_BOT_TOKEN_MO2DRKBOT:-}",
+          "botToken": "${BOT_TOKEN}",
           "dmPolicy": "open",
           "allowFrom": ["*"]
         }
