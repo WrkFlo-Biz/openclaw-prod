@@ -119,7 +119,7 @@ cat > "$CONFIG_FILE" << EOF
   "plugins": {
     "entries": {
       "telegram": {"enabled": true},
-      "lobster": {"enabled": true, "path": "/opt/lobster"}
+      "lobster": {"enabled": true}
     }
   }
 }
