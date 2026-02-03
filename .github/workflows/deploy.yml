@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_CONTAINER_REGISTRY: openclawacr
+  AZURE_CONTAINER_REGISTRY: wrkfloopenclawacr
   RESOURCE_GROUP: openclaw-rg
   CONTAINER_GROUP_NAME: openclaw-aci
   CONTAINER_IMAGE: openclaw
@@ -27,7 +27,10 @@ jobs:
 
       - name: Login to ACR
         run: |
-          az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+          az acr login \
+            --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
+            --username ${{ secrets.ACR_USERNAME }} \
+            --password ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Docker image
         run: |
