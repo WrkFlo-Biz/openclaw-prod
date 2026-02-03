@@ -71,3 +71,33 @@ jobs:
               TELEGRAM_BOT_TOKEN_DEFAULT=${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }} \
               TELEGRAM_BOT_TOKEN_MO2DRKBOT=${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }} \
               OPENCLAW_GATEWAY_TOKEN=${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+
+      - name: Health Check (ACI)
+        run: |
+          echo "Waiting for container to stabilize..."
+          for i in {1..30}; do
+            state=$(az container show \
+              --name ${{ env.CONTAINER_GROUP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --query "containers[0].instanceView.currentState.state" -o tsv || true)
+            detail=$(az container show \
+              --name ${{ env.CONTAINER_GROUP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --query "containers[0].instanceView.currentState.detailStatus" -o tsv || true)
+            restarts=$(az container show \
+              --name ${{ env.CONTAINER_GROUP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --query "containers[0].instanceView.restartCount" -o tsv || true)
+            echo "state=$state detail=$detail restarts=$restarts"
+            if [ "$state" = "Running" ] && [ "$restarts" = "0" ]; then
+              echo "Container is healthy."
+              exit 0
+            fi
+            if echo "$detail" | grep -q "CrashLoopBackOff"; then
+              echo "Container crash looping." >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for container to become healthy." >&2
+          exit 1
