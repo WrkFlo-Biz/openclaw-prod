@@ -1,0 +1,93 @@
+{
+  "version": "1.0.0",
+  "description": "Safety configuration for OpenClaw autonomous agent skills",
+
+  "rate_limits": {
+    "max_actions_per_minute": 10,
+    "max_external_sends_per_hour": 50,
+    "max_deployments_per_day": 20,
+    "cooldown_after_error_seconds": 30
+  },
+
+  "blocked_commands": {
+    "shell": [
+      "rm -rf /",
+      "rm -rf /*",
+      "rm -rf ~",
+      ":(){ :|:& };:",
+      "mkfs",
+      "dd if=/dev/zero",
+      "chmod -R 777 /",
+      "> /dev/sda",
+      "mv /* /dev/null",
+      "wget.*|.*sh",
+      "curl.*|.*bash"
+    ],
+    "docker": [
+      "--privileged",
+      "-v /:/",
+      "--pid=host",
+      "--network=host"
+    ],
+    "financial": [
+      "transfer",
+      "withdraw",
+      "send_payment",
+      "approve_spend"
+    ]
+  },
+
+  "approval_required": {
+    "actions": [
+      "deploy_container",
+      "restart_service",
+      "run_script",
+      "delete_resource",
+      "modify_config",
+      "send_external_message",
+      "backup_restore",
+      "scale_infrastructure"
+    ],
+    "patterns": [
+      ".*delete.*",
+      ".*remove.*",
+      ".*drop.*",
+      ".*truncate.*",
+      ".*destroy.*"
+    ]
+  },
+
+  "auto_approved": {
+    "actions": [
+      "fetch_data",
+      "read_status",
+      "list_resources",
+      "get_metrics",
+      "check_health",
+      "query_api"
+    ]
+  },
+
+  "emergency_stop": {
+    "commands": ["/emergency-stop", "/kill", "/halt", "/stop-all"],
+    "authorized_users": ["admin"],
+    "action": "halt_all_workflows"
+  },
+
+  "audit": {
+    "enabled": true,
+    "log_file": "/data/openclaw/logs/audit.log",
+    "retention_days": 30,
+    "log_level": "INFO",
+    "include_timestamps": true,
+    "include_user_context": true
+  },
+
+  "notifications": {
+    "on_approval_required": true,
+    "on_error": true,
+    "on_emergency_stop": true,
+    "on_rate_limit_exceeded": true,
+    "telegram_admin_chat": "${TELEGRAM_ADMIN_CHAT_ID}"
+  }
+}
