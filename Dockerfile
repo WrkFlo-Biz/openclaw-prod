@@ -3,9 +3,26 @@ FROM node:22-slim
 LABEL maintainer="mo2dark"
 LABEL description="OpenClaw Production Container"
 
-# Install curl, git for healthcheck and OpenClaw
-RUN apt-get update && apt-get install -y curl git && rm -rf /var/lib/apt/lists/* \
-    && npm install -g openclaw@latest pnpm
+# Install runtime dependencies required by key OpenClaw skills.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates \
+       curl \
+       ffmpeg \
+       gh \
+       git \
+       jq \
+       python3 \
+       ripgrep \
+       tmux \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g \
+       @openai/codex \
+       clawhub \
+       mcporter \
+       openclaw@latest \
+       pnpm \
+       summarize
 
 # Install Lobster workflow engine
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \

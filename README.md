@@ -42,19 +42,15 @@ az container create \
     AZURE_OPENAI_ENDPOINT=<endpoint> \
     AZURE_OPENAI_DEPLOYMENT=gpt-4o \
     AZURE_OPENAI_API_VERSION=2024-05-01-preview \
+    GITHUB_REPO=Wrk-Flo/openclaw-prod \
   --secure-environment-variables \
     AZURE_OPENAI_API_KEY=<key> \
     TELEGRAM_BOT_TOKEN_DEFAULT=<token> \
     TELEGRAM_BOT_TOKEN_MO2DRKBOT=<token> \
-    TELEGRAM_WEBHOOK_URL=<public-https-url> \
-    TELEGRAM_WEBHOOK_SECRET=<secret> \
+    GH_TOKEN=<github-token> \
+    OPENAI_API_KEY=<openai-token-for-codex> \
     OPENCLAW_GATEWAY_TOKEN=<token> \
-  --azure-file-volume-account-name <storage-account> \
-  --azure-file-volume-account-key <storage-key> \
-  --azure-file-volume-share-name <file-share> \
-  --azure-file-volume-mount-path /data/openclaw \
-  --ip-address Public \
-  --ports 8787
+  --ip-address Private
 ```
 
 ## Environment Variables
@@ -64,10 +60,12 @@ az container create \
 | AZURE_OPENAI_API_KEY | Yes | Azure OpenAI API key |
 | AZURE_OPENAI_ENDPOINT | Yes | Azure OpenAI endpoint URL |
 | AZURE_OPENAI_DEPLOYMENT | Yes | Model deployment name (e.g., gpt-4o) |
+| AZURE_OPENAI_API_VERSION | No | Azure OpenAI API version (defaults to 2024-05-01-preview) |
 | TELEGRAM_BOT_TOKEN_DEFAULT | Yes | Primary Telegram bot token |
 | TELEGRAM_BOT_TOKEN_MO2DRKBOT | No | Secondary Telegram bot token |
-| TELEGRAM_WEBHOOK_URL | Yes (webhook mode) | Public HTTPS webhook URL |
-| TELEGRAM_WEBHOOK_SECRET | Yes (webhook mode) | Webhook secret (8-256 chars) |
+| GITHUB_REPO | No | GitHub repo slug used by skills (defaults to Wrk-Flo/openclaw-prod) |
+| GH_TOKEN | No | GitHub token used by `gh` inside runtime |
+| OPENAI_API_KEY | No | Enables `codex` CLI usage in `coding-agent` skill |
 | OPENCLAW_GATEWAY_TOKEN | Yes | Gateway auth token |
 
 ## Architecture
@@ -76,6 +74,26 @@ az container create \
 - **Registry:** Azure Container Registry
 - **AI Backend:** Azure OpenAI Service
 - **Channels:** Telegram (polling mode, no inbound webhooks)
+
+## Installed Skill Dependencies
+
+The production image includes the binaries required for core cloud automation skills:
+
+- `gh` for `github`
+- `codex` for `coding-agent`
+- `clawhub`
+- `mcporter`
+- `jq` + `rg` for `session-logs`
+- `summarize`
+- `ffmpeg` for media workflows
+
+Verify from a running container:
+
+```bash
+openclaw skills check
+openclaw skills info github
+openclaw skills info coding-agent
+```
 
 ## Logs
 

@@ -13,6 +13,14 @@ BOT_TOKEN_MO2DRKBOT="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
 
 GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-change-me}"
 
+# Align token variable names for tools/skills that expect GH_TOKEN.
+if [ -z "${GH_TOKEN:-}" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+  export GH_TOKEN="${GITHUB_TOKEN}"
+fi
+if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GH_TOKEN:-}" ]; then
+  export GITHUB_TOKEN="${GH_TOKEN}"
+fi
+
 # Validate at least one bot token is provided
 if [ -z "${BOT_TOKEN_DEFAULT}" ] && [ -z "${BOT_TOKEN_MO2DRKBOT}" ]; then
   echo "At least one Telegram bot token is required (TELEGRAM_BOT_TOKEN_DEFAULT or TELEGRAM_BOT_TOKEN_MO2DRKBOT)" >&2
@@ -58,7 +66,11 @@ cat > "$CONFIG_FILE" << EOF
     "AZURE_OPENAI_API_KEY": "${AZURE_OPENAI_API_KEY}",
     "AZURE_OPENAI_ENDPOINT": "${AZURE_OPENAI_ENDPOINT}",
     "AZURE_OPENAI_API_VERSION": "${AZURE_OPENAI_API_VERSION:-2024-05-01-preview}",
-    "AZURE_OPENAI_DEPLOYMENT": "${AZURE_OPENAI_DEPLOYMENT:-gpt-4o}"
+    "AZURE_OPENAI_DEPLOYMENT": "${AZURE_OPENAI_DEPLOYMENT:-gpt-4o}",
+    "GH_TOKEN": "${GH_TOKEN}",
+    "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+    "GITHUB_REPO": "${GITHUB_REPO:-Wrk-Flo/openclaw-prod}",
+    "OPENAI_API_KEY": "${OPENAI_API_KEY}"
   },
   "models": {
     "mode": "merge",
@@ -126,7 +138,16 @@ cat > "$CONFIG_FILE" << EOF
 EOF
 
 echo "OpenClaw config generated at $CONFIG_FILE"
-cat "$CONFIG_FILE"
+ACCOUNT_COUNT=0
+if [ -n "${BOT_TOKEN_DEFAULT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
+if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
+echo "Configured Telegram accounts: ${ACCOUNT_COUNT}"
+echo "Configured model: azure-gpt4o/${AZURE_OPENAI_DEPLOYMENT:-gpt-4o}"
+if [ -n "${GH_TOKEN:-}" ]; then
+  echo "GitHub token configured for skill runtime"
+else
+  echo "GitHub token not configured"
+fi
 
 # Start OpenClaw gateway
 exec openclaw gateway run --bind 0.0.0.0 --port 18789
