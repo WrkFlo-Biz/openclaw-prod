@@ -19,6 +19,7 @@ env:
   RESOURCE_GROUP: openclaw-rg
   CONTAINER_GROUP_NAME: openclaw-aci
   CONTAINER_IMAGE: openclaw
+  GITHUB_REPO: Wrk-Flo/openclaw-prod
   IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.imageTag || github.sha }}
 
 jobs:
@@ -66,10 +67,13 @@ jobs:
               AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }} \
               AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }} \
               AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }} \
+              GITHUB_REPO=${{ env.GITHUB_REPO }} \
             --secure-environment-variables \
               AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }} \
               TELEGRAM_BOT_TOKEN_DEFAULT=${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }} \
               TELEGRAM_BOT_TOKEN_MO2DRKBOT=${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }} \
+              GH_TOKEN=${{ secrets.GH_TOKEN }} \
+              OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
               OPENCLAW_GATEWAY_TOKEN=${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
 
       - name: Health Check (ACI)
