@@ -1,0 +1,521 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "Manual_Trigger": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "chatId": { "type": "string" },
+              "userId": { "type": "string" },
+              "userName": { "type": "string" },
+              "operation": { "type": "string" },
+              "target": { "type": "string" }
+            },
+            "required": ["chatId", "userId", "operation"]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Initialize_Variables": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "approvalId",
+              "type": "string",
+              "value": "@{guid()}"
+            },
+            {
+              "name": "operationResult",
+              "type": "object",
+              "value": {}
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Validate_Operation": {
+        "type": "If",
+        "expression": {
+          "and": [
+            {
+              "contains": [
+                ["deploy", "backup", "scale", "run-script", "restart"],
+                "@triggerBody()?['operation']"
+              ]
+            },
+            {
+              "not": {
+                "or": [
+                  { "contains": ["@triggerBody()?['target']", "rm -rf"] },
+                  { "contains": ["@triggerBody()?['target']", "--privileged"] },
+                  { "contains": ["@triggerBody()?['target']", "mkfs"] },
+                  { "contains": ["@triggerBody()?['target']", "dd if=/dev"] }
+                ]
+              }
+            }
+          ]
+        },
+        "actions": {
+          "Continue_Processing": {
+            "type": "Compose",
+            "inputs": "Operation validated"
+          }
+        },
+        "else": {
+          "actions": {
+            "Send_Blocked_Notification": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "telegram"
+                  }
+                },
+                "method": "post",
+                "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                "body": {
+                  "chat_id": "@{triggerBody()?['chatId']}",
+                  "text": "**Operation Blocked**\n\nThe requested operation is not allowed:\n- Operation: @{triggerBody()?['operation']}\n- Target: @{triggerBody()?['target']}\n\nThis action has been blocked for security reasons.",
+                  "parse_mode": "Markdown"
+                }
+              }
+            },
+            "Log_Blocked_Operation": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "azureblob"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/datasets/@{encodeURIComponent('AccountNameFromSettings')}/files",
+                "queries": {
+                  "folderPath": "/audit-logs",
+                  "name": "@{utcNow('yyyy-MM-dd')}-audit.jsonl"
+                },
+                "body": {
+                  "timestamp": "@{utcNow()}",
+                  "action": "operation_blocked",
+                  "operation": "@{triggerBody()?['operation']}",
+                  "target": "@{triggerBody()?['target']}",
+                  "userId": "@{triggerBody()?['userId']}",
+                  "reason": "blocked_command"
+                }
+              },
+              "runAfter": {
+                "Send_Blocked_Notification": ["Succeeded"]
+              }
+            },
+            "Terminate_Blocked": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "OperationBlocked",
+                  "message": "Operation blocked by security rules"
+                }
+              },
+              "runAfter": {
+                "Log_Blocked_Operation": ["Succeeded"]
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "Initialize_Variables": ["Succeeded"]
+        }
+      },
+      "Check_Rate_Limit": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azuretables"
+            }
+          },
+          "method": "get",
+          "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('RateLimits')}/entities",
+          "queries": {
+            "$filter": "PartitionKey eq 'devops' and Timestamp gt datetime'@{addHours(utcNow(), -1)}'"
+          }
+        },
+        "runAfter": {
+          "Validate_Operation": ["Succeeded"]
+        }
+      },
+      "Rate_Limit_Check": {
+        "type": "If",
+        "expression": {
+          "greater": ["@length(body('Check_Rate_Limit')?['value'])", 5]
+        },
+        "actions": {
+          "Send_Rate_Limit_Message": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "referenceName": "telegram"
+                }
+              },
+              "method": "post",
+              "path": "/bot@{parameters('telegram_token')}/sendMessage",
+              "body": {
+                "chat_id": "@{triggerBody()?['chatId']}",
+                "text": "**Rate Limit Exceeded**\n\nMaximum 5 DevOps operations per hour.\nPlease wait before trying again.",
+                "parse_mode": "Markdown"
+              }
+            }
+          },
+          "Terminate_Rate_Limited": {
+            "type": "Terminate",
+            "inputs": {
+              "runStatus": "Cancelled"
+            },
+            "runAfter": {
+              "Send_Rate_Limit_Message": ["Succeeded"]
+            }
+          }
+        },
+        "runAfter": {
+          "Check_Rate_Limit": ["Succeeded"]
+        }
+      },
+      "Store_Pending_Approval": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azuretables"
+            }
+          },
+          "method": "post",
+          "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('PendingApprovals')}/entities",
+          "body": {
+            "PartitionKey": "devops",
+            "RowKey": "@{variables('approvalId')}",
+            "Operation": "@{triggerBody()?['operation']}",
+            "Target": "@{triggerBody()?['target']}",
+            "RequestedBy": "@{triggerBody()?['userName']}",
+            "RequestedById": "@{triggerBody()?['userId']}",
+            "ChatId": "@{triggerBody()?['chatId']}",
+            "Status": "pending",
+            "RequestedAt": "@{utcNow()}",
+            "ExpiresAt": "@{addHours(utcNow(), 1)}"
+          }
+        },
+        "runAfter": {
+          "Rate_Limit_Check": ["Succeeded"]
+        }
+      },
+      "Send_Approval_Request": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "telegram"
+            }
+          },
+          "method": "post",
+          "path": "/bot@{parameters('telegram_token')}/sendMessage",
+          "body": {
+            "chat_id": "@{parameters('admin_chat_id')}",
+            "text": "**Approval Required**\n\n**Operation:** @{triggerBody()?['operation']}\n**Target:** @{triggerBody()?['target']}\n**Requested by:** @{triggerBody()?['userName']}\n**Approval ID:** `@{variables('approvalId')}`\n\nTo approve: `/approve @{variables('approvalId')}`\nTo deny: `/deny @{variables('approvalId')}`\n\n_Expires in 1 hour_",
+            "parse_mode": "Markdown"
+          }
+        },
+        "runAfter": {
+          "Store_Pending_Approval": ["Succeeded"]
+        }
+      },
+      "Notify_Requester": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "telegram"
+            }
+          },
+          "method": "post",
+          "path": "/bot@{parameters('telegram_token')}/sendMessage",
+          "body": {
+            "chat_id": "@{triggerBody()?['chatId']}",
+            "text": "**Approval Pending**\n\nYour request has been submitted for approval:\n- **Operation:** @{triggerBody()?['operation']}\n- **Target:** @{triggerBody()?['target']}\n- **Approval ID:** `@{variables('approvalId')}`\n\nYou will be notified when it's approved or denied.",
+            "parse_mode": "Markdown"
+          }
+        },
+        "runAfter": {
+          "Send_Approval_Request": ["Succeeded"]
+        }
+      },
+      "Wait_For_Approval": {
+        "type": "Wait",
+        "inputs": {
+          "until": {
+            "timestamp": "@{addHours(utcNow(), 1)}"
+          }
+        },
+        "runAfter": {
+          "Notify_Requester": ["Succeeded"]
+        }
+      },
+      "Check_Approval_Status": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azuretables"
+            }
+          },
+          "method": "get",
+          "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('PendingApprovals')}/entities(PartitionKey='devops',RowKey='@{variables('approvalId')}')"
+        },
+        "runAfter": {
+          "Wait_For_Approval": ["Succeeded"]
+        }
+      },
+      "Process_Approval_Result": {
+        "type": "Switch",
+        "expression": "@body('Check_Approval_Status')?['Status']",
+        "cases": {
+          "approved": {
+            "case": "approved",
+            "actions": {
+              "Execute_Operation": {
+                "type": "Switch",
+                "expression": "@triggerBody()?['operation']",
+                "cases": {
+                  "deploy": {
+                    "case": "deploy",
+                    "actions": {
+                      "Call_Azure_Automation_Deploy": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connection": {
+                              "referenceName": "azureautomation"
+                            }
+                          },
+                          "method": "post",
+                          "path": "/subscriptions/@{parameters('subscription_id')}/resourceGroups/@{parameters('resource_group')}/providers/Microsoft.Automation/automationAccounts/@{parameters('automation_account')}/jobs",
+                          "body": {
+                            "properties": {
+                              "runbook": {
+                                "name": "Deploy-Container"
+                              },
+                              "parameters": {
+                                "Target": "@{triggerBody()?['target']}",
+                                "ApprovalId": "@{variables('approvalId')}",
+                                "ApprovedBy": "@{body('Check_Approval_Status')?['ApprovedBy']}"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "backup": {
+                    "case": "backup",
+                    "actions": {
+                      "Call_Azure_Automation_Backup": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connection": {
+                              "referenceName": "azureautomation"
+                            }
+                          },
+                          "method": "post",
+                          "path": "/subscriptions/@{parameters('subscription_id')}/resourceGroups/@{parameters('resource_group')}/providers/Microsoft.Automation/automationAccounts/@{parameters('automation_account')}/jobs",
+                          "body": {
+                            "properties": {
+                              "runbook": {
+                                "name": "Create-Backup"
+                              },
+                              "parameters": {
+                                "Resource": "@{triggerBody()?['target']}",
+                                "ApprovalId": "@{variables('approvalId')}"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "scale": {
+                    "case": "scale",
+                    "actions": {
+                      "Call_Azure_Automation_Scale": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connection": {
+                              "referenceName": "azureautomation"
+                            }
+                          },
+                          "method": "post",
+                          "path": "/subscriptions/@{parameters('subscription_id')}/resourceGroups/@{parameters('resource_group')}/providers/Microsoft.Automation/automationAccounts/@{parameters('automation_account')}/jobs",
+                          "body": {
+                            "properties": {
+                              "runbook": {
+                                "name": "Scale-Service"
+                              },
+                              "parameters": {
+                                "Target": "@{triggerBody()?['target']}",
+                                "ApprovalId": "@{variables('approvalId')}"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "default": {
+                  "actions": {
+                    "Unknown_Operation": {
+                      "type": "Compose",
+                      "inputs": "Unknown operation type"
+                    }
+                  }
+                }
+              },
+              "Send_Completion_Notification": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "referenceName": "telegram"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                  "body": {
+                    "chat_id": "@{triggerBody()?['chatId']}",
+                    "text": "**Operation Completed**\n\n**Operation:** @{triggerBody()?['operation']}\n**Target:** @{triggerBody()?['target']}\n**Status:** Approved and executed\n**Approved by:** @{body('Check_Approval_Status')?['ApprovedBy']}",
+                    "parse_mode": "Markdown"
+                  }
+                },
+                "runAfter": {
+                  "Execute_Operation": ["Succeeded"]
+                }
+              }
+            }
+          },
+          "denied": {
+            "case": "denied",
+            "actions": {
+              "Send_Denial_Notification": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "referenceName": "telegram"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                  "body": {
+                    "chat_id": "@{triggerBody()?['chatId']}",
+                    "text": "**Operation Denied**\n\n**Operation:** @{triggerBody()?['operation']}\n**Target:** @{triggerBody()?['target']}\n**Denied by:** @{body('Check_Approval_Status')?['DeniedBy']}\n**Reason:** @{coalesce(body('Check_Approval_Status')?['DenialReason'], 'No reason provided')}",
+                    "parse_mode": "Markdown"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {
+            "Send_Timeout_Notification": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "telegram"
+                  }
+                },
+                "method": "post",
+                "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                "body": {
+                  "chat_id": "@{triggerBody()?['chatId']}",
+                  "text": "**Operation Expired**\n\n**Operation:** @{triggerBody()?['operation']}\n**Target:** @{triggerBody()?['target']}\n\nThe approval request has expired. Please submit a new request if needed.",
+                  "parse_mode": "Markdown"
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "Check_Approval_Status": ["Succeeded"]
+        }
+      },
+      "Log_Operation_Result": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azureblob"
+            }
+          },
+          "method": "post",
+          "path": "/v2/datasets/@{encodeURIComponent('AccountNameFromSettings')}/files",
+          "queries": {
+            "folderPath": "/audit-logs",
+            "name": "@{utcNow('yyyy-MM-dd')}-audit.jsonl"
+          },
+          "body": {
+            "timestamp": "@{utcNow()}",
+            "action": "devops_operation",
+            "operation": "@{triggerBody()?['operation']}",
+            "target": "@{triggerBody()?['target']}",
+            "requestedBy": "@{triggerBody()?['userName']}",
+            "approvalId": "@{variables('approvalId')}",
+            "status": "@{body('Check_Approval_Status')?['Status']}",
+            "approvedBy": "@{body('Check_Approval_Status')?['ApprovedBy']}",
+            "deniedBy": "@{body('Check_Approval_Status')?['DeniedBy']}"
+          }
+        },
+        "runAfter": {
+          "Process_Approval_Result": ["Succeeded", "Failed"]
+        }
+      },
+      "Update_Rate_Limit": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azuretables"
+            }
+          },
+          "method": "post",
+          "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('RateLimits')}/entities",
+          "body": {
+            "PartitionKey": "devops",
+            "RowKey": "@{guid()}",
+            "Operation": "@{triggerBody()?['operation']}",
+            "Timestamp": "@{utcNow()}"
+          }
+        },
+        "runAfter": {
+          "Log_Operation_Result": ["Succeeded"]
+        }
+      }
+    },
+    "parameters": {
+      "telegram_token": { "type": "SecureString" },
+      "admin_chat_id": { "type": "String" },
+      "subscription_id": { "type": "String" },
+      "resource_group": { "type": "String" },
+      "automation_account": { "type": "String" }
+    }
+  },
+  "kind": "Stateful"
+}

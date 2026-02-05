@@ -1,0 +1,314 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "Recurrence_Every_5_Minutes": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 5
+        }
+      },
+      "Manual_Trigger": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "chatId": { "type": "string" },
+              "source": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Initialize_Alerts_Array": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "alerts",
+              "type": "array",
+              "value": []
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Check_Rate_Limit": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azuretables"
+            }
+          },
+          "method": "get",
+          "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('RateLimits')}/entities",
+          "queries": {
+            "$filter": "PartitionKey eq 'monitor-alerts' and Timestamp gt datetime'@{addMinutes(utcNow(), -1)}'"
+          }
+        },
+        "runAfter": {
+          "Initialize_Alerts_Array": ["Succeeded"]
+        }
+      },
+      "Rate_Limit_Check": {
+        "type": "If",
+        "expression": {
+          "greater": [
+            "@length(body('Check_Rate_Limit')?['value'])",
+            10
+          ]
+        },
+        "actions": {
+          "Log_Rate_Limit_Exceeded": {
+            "type": "Compose",
+            "inputs": {
+              "status": "rate_limited",
+              "message": "Monitor alerts rate limit exceeded"
+            }
+          },
+          "Terminate_Rate_Limited": {
+            "type": "Terminate",
+            "inputs": {
+              "runStatus": "Cancelled",
+              "runError": {
+                "message": "Rate limit exceeded"
+              }
+            },
+            "runAfter": {
+              "Log_Rate_Limit_Exceeded": ["Succeeded"]
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Update_Rate_Limit_Counter": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "referenceName": "azuretables"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('RateLimits')}/entities",
+                "body": {
+                  "PartitionKey": "monitor-alerts",
+                  "RowKey": "@{guid()}",
+                  "Timestamp": "@{utcNow()}"
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "Check_Rate_Limit": ["Succeeded"]
+        }
+      },
+      "GitHub_Monitor": {
+        "type": "Scope",
+        "actions": {
+          "Get_GitHub_PRs": {
+            "type": "Http",
+            "inputs": {
+              "method": "GET",
+              "uri": "https://api.github.com/repos/@{parameters('github_repo')}/pulls?state=open",
+              "headers": {
+                "Authorization": "Bearer @{parameters('github_token')}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "OpenClaw-Monitor"
+              }
+            }
+          },
+          "Get_GitHub_Issues": {
+            "type": "Http",
+            "inputs": {
+              "method": "GET",
+              "uri": "https://api.github.com/repos/@{parameters('github_repo')}/issues?state=open&labels=urgent,critical,bug",
+              "headers": {
+                "Authorization": "Bearer @{parameters('github_token')}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "OpenClaw-Monitor"
+              }
+            },
+            "runAfter": {
+              "Get_GitHub_PRs": ["Succeeded"]
+            }
+          },
+          "Process_GitHub_Alerts": {
+            "type": "ForEach",
+            "foreach": "@union(body('Get_GitHub_PRs'), body('Get_GitHub_Issues'))",
+            "actions": {
+              "Check_If_New": {
+                "type": "If",
+                "expression": {
+                  "greater": [
+                    "@ticks(items('Process_GitHub_Alerts')?['created_at'])",
+                    "@ticks(addMinutes(utcNow(), -5))"
+                  ]
+                },
+                "actions": {
+                  "Add_GitHub_Alert": {
+                    "type": "AppendToArrayVariable",
+                    "inputs": {
+                      "name": "alerts",
+                      "value": {
+                        "type": "github",
+                        "title": "@{items('Process_GitHub_Alerts')?['title']}",
+                        "url": "@{items('Process_GitHub_Alerts')?['html_url']}",
+                        "author": "@{items('Process_GitHub_Alerts')?['user']?['login']}",
+                        "created_at": "@{items('Process_GitHub_Alerts')?['created_at']}"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "runAfter": {
+              "Get_GitHub_Issues": ["Succeeded"]
+            }
+          }
+        },
+        "runAfter": {
+          "Rate_Limit_Check": ["Succeeded"]
+        }
+      },
+      "API_Health_Check": {
+        "type": "Scope",
+        "actions": {
+          "Check_Health_Endpoints": {
+            "type": "ForEach",
+            "foreach": "@parameters('health_endpoints')",
+            "actions": {
+              "HTTP_Health_Check": {
+                "type": "Http",
+                "inputs": {
+                  "method": "GET",
+                  "uri": "@{items('Check_Health_Endpoints')?['url']}",
+                  "retryPolicy": {
+                    "type": "none"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "timeout": "PT10S"
+                }
+              },
+              "Check_Health_Status": {
+                "type": "If",
+                "expression": {
+                  "not": {
+                    "equals": [
+                      "@outputs('HTTP_Health_Check')['statusCode']",
+                      200
+                    ]
+                  }
+                },
+                "actions": {
+                  "Add_Health_Alert": {
+                    "type": "AppendToArrayVariable",
+                    "inputs": {
+                      "name": "alerts",
+                      "value": {
+                        "type": "health",
+                        "service": "@{items('Check_Health_Endpoints')?['name']}",
+                        "url": "@{items('Check_Health_Endpoints')?['url']}",
+                        "status": "@{outputs('HTTP_Health_Check')['statusCode']}",
+                        "timestamp": "@{utcNow()}"
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "HTTP_Health_Check": ["Succeeded", "Failed", "TimedOut"]
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "GitHub_Monitor": ["Succeeded", "Failed"]
+        }
+      },
+      "Check_If_Alerts_Exist": {
+        "type": "If",
+        "expression": {
+          "greater": [
+            "@length(variables('alerts'))",
+            0
+          ]
+        },
+        "actions": {
+          "Format_Alert_Message": {
+            "type": "Compose",
+            "inputs": "@concat('**Monitoring Alerts**\\n\\n', join(variables('alerts'), '\\n\\n'))"
+          },
+          "Send_Alert_Notification": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "referenceName": "telegram"
+                }
+              },
+              "method": "post",
+              "path": "/bot@{parameters('telegram_token')}/sendMessage",
+              "body": {
+                "chat_id": "@{coalesce(triggerBody()?['chatId'], parameters('admin_chat_id'))}",
+                "text": "@{outputs('Format_Alert_Message')}",
+                "parse_mode": "Markdown"
+              }
+            },
+            "runAfter": {
+              "Format_Alert_Message": ["Succeeded"]
+            }
+          }
+        },
+        "runAfter": {
+          "API_Health_Check": ["Succeeded", "Failed"]
+        }
+      },
+      "Log_Monitor_Run": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azureblob"
+            }
+          },
+          "method": "post",
+          "path": "/v2/datasets/@{encodeURIComponent('AccountNameFromSettings')}/files",
+          "queries": {
+            "folderPath": "/audit-logs",
+            "name": "@{utcNow('yyyy-MM-dd')}-audit.jsonl",
+            "queryParametersSingleEncoded": true
+          },
+          "body": {
+            "timestamp": "@{utcNow()}",
+            "action": "monitor_check",
+            "alerts_count": "@{length(variables('alerts'))}",
+            "status": "completed"
+          }
+        },
+        "runAfter": {
+          "Check_If_Alerts_Exist": ["Succeeded"]
+        }
+      }
+    },
+    "parameters": {
+      "telegram_token": { "type": "SecureString" },
+      "admin_chat_id": { "type": "String" },
+      "github_token": { "type": "SecureString" },
+      "github_repo": { "type": "String" },
+      "health_endpoints": {
+        "type": "Array",
+        "defaultValue": []
+      }
+    }
+  },
+  "kind": "Stateful"
+}

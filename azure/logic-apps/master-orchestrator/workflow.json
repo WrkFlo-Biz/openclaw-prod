@@ -1,0 +1,386 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_a_Telegram_message_is_received": {
+        "type": "ApiConnectionWebhook",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "telegram"
+            }
+          },
+          "body": {
+            "callback_url": "@{listCallbackUrl()}"
+          },
+          "path": "/webhook"
+        }
+      }
+    },
+    "actions": {
+      "Initialize_Variables": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "messageText",
+              "type": "string",
+              "value": "@{triggerBody()?['message']?['text']}"
+            },
+            {
+              "name": "chatId",
+              "type": "string",
+              "value": "@{triggerBody()?['message']?['chat']?['id']}"
+            },
+            {
+              "name": "userId",
+              "type": "string",
+              "value": "@{triggerBody()?['message']?['from']?['id']}"
+            },
+            {
+              "name": "userName",
+              "type": "string",
+              "value": "@{triggerBody()?['message']?['from']?['first_name']}"
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Log_Incoming_Message": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "azureblob"
+            }
+          },
+          "method": "post",
+          "path": "/v2/datasets/@{encodeURIComponent('AccountNameFromSettings')}/files",
+          "queries": {
+            "folderPath": "/audit-logs",
+            "name": "@{utcNow('yyyy-MM-dd')}-audit.jsonl",
+            "queryParametersSingleEncoded": true
+          },
+          "body": {
+            "timestamp": "@{utcNow()}",
+            "action": "message_received",
+            "chatId": "@{variables('chatId')}",
+            "userId": "@{variables('userId')}",
+            "userName": "@{variables('userName')}",
+            "message": "@{variables('messageText')}"
+          }
+        },
+        "runAfter": {
+          "Initialize_Variables": ["Succeeded"]
+        }
+      },
+      "Check_Emergency_Stop": {
+        "type": "If",
+        "expression": {
+          "or": [
+            {
+              "equals": ["@variables('messageText')", "/emergency-stop"]
+            },
+            {
+              "equals": ["@variables('messageText')", "/kill"]
+            },
+            {
+              "equals": ["@variables('messageText')", "/halt"]
+            }
+          ]
+        },
+        "actions": {
+          "Execute_Emergency_Stop": {
+            "type": "Workflow",
+            "inputs": {
+              "host": {
+                "workflow": {
+                  "id": "emergency-stop"
+                }
+              },
+              "body": {
+                "chatId": "@{variables('chatId')}",
+                "userId": "@{variables('userId')}",
+                "userName": "@{variables('userName')}"
+              }
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Route_Command": {
+              "type": "Switch",
+              "expression": "@{split(variables('messageText'), ' ')[0]}",
+              "cases": {
+                "help": {
+                  "case": "/help",
+                  "actions": {
+                    "Send_Help_Message": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "referenceName": "telegram"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                        "body": {
+                          "chat_id": "@{variables('chatId')}",
+                          "text": "**OpenClaw Bot Commands**\n\n**System**\n/help - Show this help\n/status - System status\n/pending - Pending approvals\n\n**Monitoring** (No approval)\n/monitor - Check monitors\n/check [target] - Health check\n\n**Data** (No approval)\n/process [pipeline] - Run data pipeline\n\n**DevOps** (Requires approval)\n/deploy [target] - Deploy\n/backup [resource] - Backup\n/scale [service] [n] - Scale\n\n**Admin**\n/approve [id] - Approve\n/deny [id] - Deny\n/emergency-stop - Halt all",
+                          "parse_mode": "Markdown"
+                        }
+                      }
+                    }
+                  }
+                },
+                "status": {
+                  "case": "/status",
+                  "actions": {
+                    "Get_System_Status": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "get-status"
+                          }
+                        }
+                      }
+                    },
+                    "Send_Status_Message": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "referenceName": "telegram"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                        "body": {
+                          "chat_id": "@{variables('chatId')}",
+                          "text": "@{body('Get_System_Status')?['statusMessage']}",
+                          "parse_mode": "Markdown"
+                        }
+                      },
+                      "runAfter": {
+                        "Get_System_Status": ["Succeeded"]
+                      }
+                    }
+                  }
+                },
+                "monitor": {
+                  "case": "/monitor",
+                  "actions": {
+                    "Call_Monitor_Alerts": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "monitor-alerts"
+                          }
+                        },
+                        "body": {
+                          "chatId": "@{variables('chatId')}",
+                          "source": "@{if(greater(length(split(variables('messageText'), ' ')), 1), split(variables('messageText'), ' ')[1], 'all')}"
+                        }
+                      }
+                    }
+                  }
+                },
+                "process": {
+                  "case": "/process",
+                  "actions": {
+                    "Call_Data_Processor": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "data-processor"
+                          }
+                        },
+                        "body": {
+                          "chatId": "@{variables('chatId')}",
+                          "pipeline": "@{if(greater(length(split(variables('messageText'), ' ')), 1), split(variables('messageText'), ' ')[1], 'all')}"
+                        }
+                      }
+                    }
+                  }
+                },
+                "deploy": {
+                  "case": "/deploy",
+                  "actions": {
+                    "Call_DevOps_Deploy": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "devops-automation"
+                          }
+                        },
+                        "body": {
+                          "chatId": "@{variables('chatId')}",
+                          "userId": "@{variables('userId')}",
+                          "userName": "@{variables('userName')}",
+                          "operation": "deploy",
+                          "target": "@{if(greater(length(split(variables('messageText'), ' ')), 1), split(variables('messageText'), ' ')[1], '')}"
+                        }
+                      }
+                    }
+                  }
+                },
+                "backup": {
+                  "case": "/backup",
+                  "actions": {
+                    "Call_DevOps_Backup": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "devops-automation"
+                          }
+                        },
+                        "body": {
+                          "chatId": "@{variables('chatId')}",
+                          "userId": "@{variables('userId')}",
+                          "userName": "@{variables('userName')}",
+                          "operation": "backup",
+                          "target": "@{if(greater(length(split(variables('messageText'), ' ')), 1), split(variables('messageText'), ' ')[1], '')}"
+                        }
+                      }
+                    }
+                  }
+                },
+                "approve": {
+                  "case": "/approve",
+                  "actions": {
+                    "Process_Approval": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "process-approval"
+                          }
+                        },
+                        "body": {
+                          "chatId": "@{variables('chatId')}",
+                          "userId": "@{variables('userId')}",
+                          "approvalId": "@{if(greater(length(split(variables('messageText'), ' ')), 1), split(variables('messageText'), ' ')[1], '')}",
+                          "action": "approve"
+                        }
+                      }
+                    }
+                  }
+                },
+                "deny": {
+                  "case": "/deny",
+                  "actions": {
+                    "Process_Denial": {
+                      "type": "Workflow",
+                      "inputs": {
+                        "host": {
+                          "workflow": {
+                            "id": "process-approval"
+                          }
+                        },
+                        "body": {
+                          "chatId": "@{variables('chatId')}",
+                          "userId": "@{variables('userId')}",
+                          "approvalId": "@{if(greater(length(split(variables('messageText'), ' ')), 1), split(variables('messageText'), ' ')[1], '')}",
+                          "action": "deny"
+                        }
+                      }
+                    }
+                  }
+                },
+                "pending": {
+                  "case": "/pending",
+                  "actions": {
+                    "Get_Pending_Approvals": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "referenceName": "azuretables"
+                          }
+                        },
+                        "method": "get",
+                        "path": "/v2/storageAccounts/@{encodeURIComponent('AccountNameFromSettings')}/tables/@{encodeURIComponent('PendingApprovals')}/entities",
+                        "queries": {
+                          "$filter": "Status eq 'pending'"
+                        }
+                      }
+                    },
+                    "Format_Pending_List": {
+                      "type": "Compose",
+                      "inputs": "@if(equals(length(body('Get_Pending_Approvals')?['value']), 0), 'No pending approvals.', concat('**Pending Approvals:**\\n\\n', join(body('Get_Pending_Approvals')?['value'], '\\n')))",
+                      "runAfter": {
+                        "Get_Pending_Approvals": ["Succeeded"]
+                      }
+                    },
+                    "Send_Pending_List": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "referenceName": "telegram"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/bot@{parameters('telegram_token')}/sendMessage",
+                        "body": {
+                          "chat_id": "@{variables('chatId')}",
+                          "text": "@{outputs('Format_Pending_List')}",
+                          "parse_mode": "Markdown"
+                        }
+                      },
+                      "runAfter": {
+                        "Format_Pending_List": ["Succeeded"]
+                      }
+                    }
+                  }
+                }
+              },
+              "default": {
+                "actions": {
+                  "Call_Auto_Responder": {
+                    "type": "Workflow",
+                    "inputs": {
+                      "host": {
+                        "workflow": {
+                          "id": "auto-responder"
+                        }
+                      },
+                      "body": {
+                        "chatId": "@{variables('chatId')}",
+                        "userId": "@{variables('userId')}",
+                        "userName": "@{variables('userName')}",
+                        "message": "@{variables('messageText')}"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "Log_Incoming_Message": ["Succeeded"]
+        }
+      }
+    },
+    "parameters": {
+      "telegram_token": {
+        "type": "SecureString"
+      },
+      "admin_chat_id": {
+        "type": "String"
+      },
+      "admin_user_ids": {
+        "type": "Array"
+      }
+    }
+  },
+  "kind": "Stateful"
+}
