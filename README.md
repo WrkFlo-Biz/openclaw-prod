@@ -74,6 +74,22 @@ az container create \
 - **Registry:** Azure Container Registry
 - **AI Backend:** Azure OpenAI Service
 - **Channels:** Telegram (polling mode, no inbound webhooks)
+- **Gateway:** WebSocket gateway on port `18789` (token-auth protected)
+
+## WebSocket Gateway Access
+
+The Azure deployment exposes OpenClaw gateway publicly so remote clients can connect.
+
+Get the current endpoint:
+
+```bash
+az container show \
+  --resource-group openclaw-rg \
+  --name openclaw-aci \
+  --query "ipAddress.ip" -o tsv
+```
+
+Use `ws://<that-ip>:18789` and include `OPENCLAW_GATEWAY_TOKEN` for auth.
 
 ## Installed Skill Dependencies
 

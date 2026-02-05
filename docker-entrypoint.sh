@@ -12,6 +12,16 @@ BOT_TOKEN_DEFAULT="${TELEGRAM_BOT_TOKEN_DEFAULT}"
 BOT_TOKEN_MO2DRKBOT="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
 
 GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-change-me}"
+GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-loopback}"
+GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+
+case "${GATEWAY_BIND}" in
+  loopback|lan|tailnet|auto|custom) ;;
+  *)
+    echo "Invalid OPENCLAW_GATEWAY_BIND: ${GATEWAY_BIND}. Use one of: loopback, lan, tailnet, auto, custom." >&2
+    exit 1
+    ;;
+esac
 
 # Align token variable names for tools/skills that expect GH_TOKEN.
 if [ -z "${GH_TOKEN:-}" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
@@ -120,9 +130,9 @@ cat > "$CONFIG_FILE" << EOF
     }
   },
   "gateway": {
-    "port": 18789,
+    "port": ${GATEWAY_PORT},
     "mode": "local",
-    "bind": "loopback",
+    "bind": "${GATEWAY_BIND}",
     "auth": {
       "mode": "token",
       "token": "${GATEWAY_TOKEN}"
@@ -143,6 +153,7 @@ if [ -n "${BOT_TOKEN_DEFAULT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
 if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
 echo "Configured Telegram accounts: ${ACCOUNT_COUNT}"
 echo "Configured model: azure-gpt4o/${AZURE_OPENAI_DEPLOYMENT:-gpt-4o}"
+echo "Gateway bind mode: ${GATEWAY_BIND} (port ${GATEWAY_PORT})"
 if [ -n "${GH_TOKEN:-}" ]; then
   echo "GitHub token configured for skill runtime"
 else
@@ -150,4 +161,4 @@ else
 fi
 
 # Start OpenClaw gateway
-exec openclaw gateway run --bind 0.0.0.0 --port 18789
+exec openclaw gateway run --bind "${GATEWAY_BIND}" --port "${GATEWAY_PORT}"

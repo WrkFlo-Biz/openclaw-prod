@@ -19,6 +19,8 @@ env:
   RESOURCE_GROUP: openclaw-rg
   CONTAINER_GROUP_NAME: openclaw-aci
   CONTAINER_IMAGE: openclaw
+  GATEWAY_PORT: "18789"
+  GATEWAY_BIND: lan
   GITHUB_REPO: Wrk-Flo/openclaw-prod
   IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.imageTag || github.sha }}
 
@@ -59,14 +61,18 @@ jobs:
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }} \
             --os-type Linux \
+            --ip-address Public \
             --restart-policy Always \
             --cpu 1 --memory 2 \
+            --ports ${{ env.GATEWAY_PORT }} \
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password ${{ secrets.ACR_PASSWORD }} \
             --environment-variables \
               AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }} \
               AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }} \
               AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }} \
+              OPENCLAW_GATEWAY_BIND=${{ env.GATEWAY_BIND }} \
+              OPENCLAW_GATEWAY_PORT=${{ env.GATEWAY_PORT }} \
               GITHUB_REPO=${{ env.GITHUB_REPO }} \
             --secure-environment-variables \
               AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }} \
