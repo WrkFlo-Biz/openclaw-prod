@@ -1,6 +1,6 @@
 # OpenClaw Production Deployment
 
-Production deployment for OpenClaw on Azure Container Instances (ACI).
+Production deployment for OpenClaw on Azure Container Apps (ACA).
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ docker run -d --name openclaw \
   openclaw-prod
 ```
 
-### Deploy to Azure (ACI)
+### Deploy to Azure (Container Apps, Recommended)
 
 1. **Push to ACR:**
 ```bash
@@ -26,23 +26,24 @@ docker tag openclaw-prod openclawacr.azurecr.io/openclaw:latest
 docker push openclawacr.azurecr.io/openclaw:latest
 ```
 
-2. **Deploy Container Group:**
+2. **Deploy Container App:**
 ```bash
-az container delete -g openclaw-rg -n openclaw-aci --yes
-az container create \
-  --name openclaw-aci \
+az containerapp create \
+  --name openclaw-gateway \
   --resource-group openclaw-rg \
+  --environment openclaw-env \
   --image openclawacr.azurecr.io/openclaw:latest \
-  --os-type Linux \
-  --restart-policy Always \
-  --cpu 1 --memory 2 \
-  --registry-username <acr-username> \
-  --registry-password <acr-password> \
+  --ingress external --target-port 18789 --transport auto \
+  --min-replicas 1 --max-replicas 1 \
+  --registry-server openclawacr.azurecr.io \
+  --registry-username <acr-username> --registry-password <acr-password> \
   --environment-variables \
     AZURE_OPENAI_ENDPOINT=<endpoint> \
     AZURE_OPENAI_DEPLOYMENT=gpt-4o \
     AZURE_OPENAI_API_VERSION=2024-05-01-preview \
     GITHUB_REPO=Wrk-Flo/openclaw-prod \
+    OPENCLAW_GATEWAY_BIND=lan \
+    OPENCLAW_GATEWAY_PORT=18789 \
   --secure-environment-variables \
     AZURE_OPENAI_API_KEY=<key> \
     TELEGRAM_BOT_TOKEN_DEFAULT=<token> \
@@ -50,7 +51,6 @@ az container create \
     GH_TOKEN=<github-token> \
     OPENAI_API_KEY=<openai-token-for-codex> \
     OPENCLAW_GATEWAY_TOKEN=<token> \
-  --ip-address Private
 ```
 
 ## Environment Variables
@@ -70,7 +70,7 @@ az container create \
 
 ## Architecture
 
-- **Runtime:** Azure Container Instances (serverless containers)
+- **Runtime:** Azure Container Apps (HTTPS + WebSockets)
 - **Registry:** Azure Container Registry
 - **AI Backend:** Azure OpenAI Service
 - **Channels:** Telegram (polling mode, no inbound webhooks)
@@ -78,18 +78,18 @@ az container create \
 
 ## WebSocket Gateway Access
 
-The Azure deployment exposes OpenClaw gateway publicly so remote clients can connect.
+The Control UI runs in a browser and requires a secure context (HTTPS). Azure Container Apps provides an HTTPS endpoint by default, so the UI can connect using `wss://`.
 
 Get the current endpoint:
 
 ```bash
-az container show \
+az containerapp show \
   --resource-group openclaw-rg \
-  --name openclaw-aci \
-  --query "ipAddress.ip" -o tsv
+  --name openclaw-gateway \
+  --query "properties.configuration.ingress.fqdn" -o tsv
 ```
 
-Use `ws://<that-ip>:18789` and include `OPENCLAW_GATEWAY_TOKEN` for auth.
+Open `https://<that-fqdn>/` and include `OPENCLAW_GATEWAY_TOKEN` when prompted for auth.
 
 ## Installed Skill Dependencies
 
@@ -114,7 +114,7 @@ openclaw skills info coding-agent
 ## Logs
 
 View logs in Azure Portal:
-1. Go to Container Instances > openclaw-aci
+1. Go to Container Apps > openclaw-gateway
 2. Click "Logs" for real-time logs
 
 ## Redeploy (< 2 minutes)
