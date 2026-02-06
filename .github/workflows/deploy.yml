@@ -54,6 +54,7 @@ jobs:
 
       - name: Deploy to Azure Container Apps (HTTPS + WebSockets)
         run: |
+          set -euo pipefail
           az extension add --name containerapp --upgrade
 
           APP_NAME="${{ env.CONTAINER_APP_NAME }}"
@@ -62,78 +63,41 @@ jobs:
           REGISTRY_SERVER="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
           IMAGE="${REGISTRY_SERVER}/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }}"
 
-          if ! az containerapp show -g "$RG" -n "$APP_NAME" >/dev/null 2>&1; then
-            az containerapp create \
-              -g "$RG" -n "$APP_NAME" \
-              --environment "$ENV_NAME" \
-              --image "$IMAGE" \
-              --ingress external \
-              --target-port "${{ env.GATEWAY_PORT }}" \
-              --transport auto \
-              --min-replicas 1 --max-replicas 1 \
-              --registry-server "$REGISTRY_SERVER" \
-              --registry-username "${{ secrets.ACR_USERNAME }}" \
-              --registry-password "${{ secrets.ACR_PASSWORD }}" \
-              --secrets \
-                azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
-                telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
-                telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
-                gh-token='${{ secrets.GH_TOKEN }}' \
-                openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
-                openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
-              --env-vars \
-                AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
-                AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
-                AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
-                OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
-                OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
-                GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-                AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
-                TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
-                TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
-                GH_TOKEN=secretref:gh-token \
-                OPENAI_API_KEY=secretref:openai-api-key \
-                OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token
-          else
-            az containerapp secret set \
-              -g "$RG" -n "$APP_NAME" \
-              --secrets \
-                azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
-                telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
-                telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
-                gh-token='${{ secrets.GH_TOKEN }}' \
-                openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
-                openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
+          # ACA can get stuck in provisioning after a partial create; recreate for a clean deploy.
+          az containerapp delete -g "$RG" -n "$APP_NAME" --yes || true
 
-            az containerapp registry set \
-              -g "$RG" -n "$APP_NAME" \
-              --server "$REGISTRY_SERVER" \
-              --username "${{ secrets.ACR_USERNAME }}" \
-              --password "${{ secrets.ACR_PASSWORD }}"
-
-            az containerapp update \
-              -g "$RG" -n "$APP_NAME" \
-              --image "$IMAGE" \
-              --min-replicas 1 --max-replicas 1 \
-              --set-env-vars \
-                AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
-                AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
-                AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
-                OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
-                OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
-                GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-                AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
-                TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
-                TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
-                GH_TOKEN=secretref:gh-token \
-                OPENAI_API_KEY=secretref:openai-api-key \
-                OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token
-
-            az containerapp ingress update \
-              -g "$RG" -n "$APP_NAME" \
-              --target-port "${{ env.GATEWAY_PORT }}" \
-              --transport auto
-          fi
+          az containerapp create \
+            -g "$RG" -n "$APP_NAME" \
+            --environment "$ENV_NAME" \
+            --image "$IMAGE" \
+            --ingress external \
+            --target-port "${{ env.GATEWAY_PORT }}" \
+            --transport auto \
+            --cpu 1.0 --memory 2.0Gi \
+            --min-replicas 1 --max-replicas 1 \
+            --registry-server "$REGISTRY_SERVER" \
+            --registry-username "${{ secrets.ACR_USERNAME }}" \
+            --registry-password "${{ secrets.ACR_PASSWORD }}" \
+            --secrets \
+              azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
+              telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
+              telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
+              gh-token='${{ secrets.GH_TOKEN }}' \
+              openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
+              openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
+            --env-vars \
+              AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
+              AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
+              AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
+              OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
+              OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
+              GITHUB_REPO='${{ env.GITHUB_REPO }}' \
+              AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
+              TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
+              TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
+              GH_TOKEN=secretref:gh-token \
+              OPENAI_API_KEY=secretref:openai-api-key \
+              OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token
 
           FQDN="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
           echo "Container App FQDN: $FQDN"
