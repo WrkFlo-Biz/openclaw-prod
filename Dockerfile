@@ -27,7 +27,7 @@ RUN apt-get update \
 # Azure Files (SMB) mounts in Azure Container Apps commonly reject chmod/chown.
 # OpenClaw hardens file perms (0600) for session and Telegram offset stores; treat chmod as best-effort
 # so the gateway doesn't fail on EPERM in cloud-mounted volumes.
-RUN set -euo pipefail; \
+RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     sed -i 's/await fs\\.chmod(tmp, 0o600);/await fs.chmod(tmp, 0o600).catch(() => {});/g' "$OPENCLAW_DIR/dist/telegram/update-offset-store.js"; \
     sed -i 's/await fs\\.promises\\.chmod(storePath, 0o600);/await fs.promises.chmod(storePath, 0o600).catch(() => {});/g' "$OPENCLAW_DIR/dist/config/sessions/store.js"
