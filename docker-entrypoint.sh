@@ -244,11 +244,10 @@ cat > "$CONFIG_FILE" << EOF
       "llm-task": {
         "enabled": true,
         "config": {
-          "defaultProvider": "openai-codex",
-          "defaultModel": "gpt-5.2",
+          "defaultProvider": "azure-claude",
+          "defaultModel": "claude-opus-4-6",
           "defaultAuthProfileId": "main",
           "allowedModels": [
-            "openai-codex/gpt-5.3-codex",
             "azure-claude/claude-opus-4-6",
             "azure-openai/gpt-5-mini",
             "azure-openai/gpt-5.2",

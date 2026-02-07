@@ -190,8 +190,8 @@ jobs:
           # Ensure Azure Files mount is configured on the container app template.
           # If the mount already exists, skip the PATCH. Azure can add template fields
           # that are not accepted by the API version we PATCH with (e.g. customMetricsSettings).
-          MOUNT_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" --query \"properties.template.containers[0].volumeMounts[?volumeName=='$ENV_STORAGE_NAME' && mountPath=='$MOUNT_PATH'] | length(@)\" -o tsv || true)"
-          VOLUME_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" --query \"properties.template.volumes[?name=='$ENV_STORAGE_NAME'] | length(@)\" -o tsv || true)"
+          MOUNT_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" -o json | jq --arg v "$ENV_STORAGE_NAME" --arg m "$MOUNT_PATH" '[.properties.template.containers[0].volumeMounts // [] | .[] | select(.volumeName == $v and .mountPath == $m)] | length')"
+          VOLUME_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" -o json | jq --arg v "$ENV_STORAGE_NAME" '[.properties.template.volumes // [] | .[] | select(.name == $v)] | length')"
           MOUNT_PRESENT="${MOUNT_PRESENT:-0}"
           VOLUME_PRESENT="${VOLUME_PRESENT:-0}"
 
