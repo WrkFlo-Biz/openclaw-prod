@@ -23,8 +23,8 @@ env:
   # Persist OpenClaw state across revisions/redeploys (skills, telegram, workspace, logs, etc.)
   STORAGE_ACCOUNT: openclawstatewf
   FILE_SHARE: openclawdata
-  ENV_STORAGE_NAME: openclawdata
-  MOUNT_PATH: /data/openclaw
+  ENV_STORAGE_NAME: openclaw-state
+  MOUNT_PATH: /data/openclaw/.openclaw
   GATEWAY_PORT: "18789"
   GATEWAY_BIND: lan
   GITHUB_REPO: Wrk-Flo/openclaw-prod
@@ -101,10 +101,14 @@ jobs:
               -g "$RG" -n "$APP_NAME" \
               --secrets \
                 azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
+                azure-claude-api-key='${{ secrets.AZURE_CLAUDE_API_KEY }}' \
                 telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
                 telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
                 gh-token='${{ secrets.GH_TOKEN }}' \
                 openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
+                gemini-api-key='${{ secrets.GEMINI_API_KEY }}' \
+                google-places-api-key='${{ secrets.GOOGLE_PLACES_API_KEY }}' \
+                elevenlabs-api-key='${{ secrets.ELEVENLABS_API_KEY }}' \
                 openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
               >/dev/null
 
@@ -115,14 +119,19 @@ jobs:
                 AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
                 AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
                 AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
+                AZURE_CLAUDE_ENDPOINT='${{ secrets.AZURE_CLAUDE_ENDPOINT }}' \
                 OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
                 OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
                 GITHUB_REPO='${{ env.GITHUB_REPO }}' \
                 AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
+                AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
                 TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
                 TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
                 GH_TOKEN=secretref:gh-token \
                 OPENAI_API_KEY=secretref:openai-api-key \
+                GEMINI_API_KEY=secretref:gemini-api-key \
+                GOOGLE_PLACES_API_KEY=secretref:google-places-api-key \
+                ELEVENLABS_API_KEY=secretref:elevenlabs-api-key \
                 OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
               >/dev/null
           else
@@ -141,23 +150,32 @@ jobs:
               --registry-password "${{ secrets.ACR_PASSWORD }}" \
               --secrets \
                 azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
+                azure-claude-api-key='${{ secrets.AZURE_CLAUDE_API_KEY }}' \
                 telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
                 telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
                 gh-token='${{ secrets.GH_TOKEN }}' \
                 openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
+                gemini-api-key='${{ secrets.GEMINI_API_KEY }}' \
+                google-places-api-key='${{ secrets.GOOGLE_PLACES_API_KEY }}' \
+                elevenlabs-api-key='${{ secrets.ELEVENLABS_API_KEY }}' \
                 openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
               --env-vars \
                 AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
                 AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
                 AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
+                AZURE_CLAUDE_ENDPOINT='${{ secrets.AZURE_CLAUDE_ENDPOINT }}' \
                 OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
                 OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
                 GITHUB_REPO='${{ env.GITHUB_REPO }}' \
                 AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
+                AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
                 TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
                 TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
                 GH_TOKEN=secretref:gh-token \
                 OPENAI_API_KEY=secretref:openai-api-key \
+                GEMINI_API_KEY=secretref:gemini-api-key \
+                GOOGLE_PLACES_API_KEY=secretref:google-places-api-key \
+                ELEVENLABS_API_KEY=secretref:elevenlabs-api-key \
                 OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
               >/dev/null
           fi
@@ -167,6 +185,7 @@ jobs:
           API_VERSION="2026-01-01"
           TEMPLATE="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.template -o json)"
           UPDATED_TEMPLATE="$(echo "$TEMPLATE" | jq --arg storageName "$ENV_STORAGE_NAME" --arg mountPath "$MOUNT_PATH" '
+            walk(if type == "object" then del(.imageType) else . end) |
             .volumes = ((.volumes // []) | map(select(.name != $storageName)) + [{"name": $storageName, "storageType": "AzureFile", "storageName": $storageName}]) |
             .containers = (.containers | map(
               if .name == "openclaw-gateway" then
