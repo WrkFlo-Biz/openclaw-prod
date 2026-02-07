@@ -20,6 +20,11 @@ env:
   CONTAINER_APPS_ENVIRONMENT: openclaw-env
   CONTAINER_APP_NAME: openclaw-gateway
   CONTAINER_IMAGE: openclaw
+  # Persist OpenClaw state across revisions/redeploys (skills, telegram, workspace, logs, etc.)
+  STORAGE_ACCOUNT: openclawstatewf
+  FILE_SHARE: openclawdata
+  ENV_STORAGE_NAME: openclawdata
+  MOUNT_PATH: /data/openclaw
   GATEWAY_PORT: "18789"
   GATEWAY_BIND: lan
   GITHUB_REPO: Wrk-Flo/openclaw-prod
@@ -63,41 +68,119 @@ jobs:
           REGISTRY_SERVER="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
           IMAGE="${REGISTRY_SERVER}/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }}"
 
-          # ACA can get stuck in provisioning after a partial create; recreate for a clean deploy.
-          az containerapp delete -g "$RG" -n "$APP_NAME" --yes || true
+          # Ensure persistent Azure Files storage exists for /data/openclaw.
+          # OpenClaw writes runtime state under /data/openclaw/.openclaw (skills, telegram, workspace, logs, etc).
+          STORAGE_ACCOUNT="${{ env.STORAGE_ACCOUNT }}"
+          FILE_SHARE="${{ env.FILE_SHARE }}"
+          ENV_STORAGE_NAME="${{ env.ENV_STORAGE_NAME }}"
+          MOUNT_PATH="${{ env.MOUNT_PATH }}"
+          STORAGE_KEY="$(az storage account keys list -g "$RG" -n "$STORAGE_ACCOUNT" --query '[0].value' -o tsv)"
 
-          az containerapp create \
-            -g "$RG" -n "$APP_NAME" \
-            --environment "$ENV_NAME" \
-            --image "$IMAGE" \
-            --ingress external \
-            --target-port "${{ env.GATEWAY_PORT }}" \
-            --transport auto \
-            --cpu 1.0 --memory 2.0Gi \
-            --min-replicas 1 --max-replicas 1 \
-            --registry-server "$REGISTRY_SERVER" \
-            --registry-username "${{ secrets.ACR_USERNAME }}" \
-            --registry-password "${{ secrets.ACR_PASSWORD }}" \
-            --secrets \
-              azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
-              telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
-              telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
-              gh-token='${{ secrets.GH_TOKEN }}' \
-              openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
-              openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
-            --env-vars \
-              AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
-              AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
-              AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
-              OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
-              OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
-              GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-              AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
-              TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
-              TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
-              GH_TOKEN=secretref:gh-token \
-              OPENAI_API_KEY=secretref:openai-api-key \
-              OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token
+          # Idempotent: if the share already exists, keep going.
+          az storage share-rm create -g "$RG" --storage-account "$STORAGE_ACCOUNT" --name "$FILE_SHARE" --quota 100 >/dev/null 2>&1 || true
+
+          az containerapp env storage set \
+            -g "$RG" -n "$ENV_NAME" \
+            --storage-name "$ENV_STORAGE_NAME" \
+            --access-mode ReadWrite \
+            --azure-file-account-name "$STORAGE_ACCOUNT" \
+            --azure-file-account-key "$STORAGE_KEY" \
+            --azure-file-share-name "$FILE_SHARE" >/dev/null
+
+          # Prefer in-place update to avoid downtime and preserve mounted state.
+          if az containerapp show -g "$RG" -n "$APP_NAME" >/dev/null 2>&1; then
+            echo "Updating existing container app: $APP_NAME"
+
+            az containerapp registry set \
+              -g "$RG" -n "$APP_NAME" \
+              --server "$REGISTRY_SERVER" \
+              --username "${{ secrets.ACR_USERNAME }}" \
+              --password "${{ secrets.ACR_PASSWORD }}" >/dev/null
+
+            az containerapp secret set \
+              -g "$RG" -n "$APP_NAME" \
+              --secrets \
+                azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
+                telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
+                telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
+                gh-token='${{ secrets.GH_TOKEN }}' \
+                openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
+                openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
+              >/dev/null
+
+            az containerapp update \
+              -g "$RG" -n "$APP_NAME" \
+              --image "$IMAGE" \
+              --replace-env-vars \
+                AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
+                AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
+                AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
+                OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
+                OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
+                GITHUB_REPO='${{ env.GITHUB_REPO }}' \
+                AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
+                TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
+                TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
+                GH_TOKEN=secretref:gh-token \
+                OPENAI_API_KEY=secretref:openai-api-key \
+                OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
+              >/dev/null
+          else
+            echo "Creating container app: $APP_NAME"
+            az containerapp create \
+              -g "$RG" -n "$APP_NAME" \
+              --environment "$ENV_NAME" \
+              --image "$IMAGE" \
+              --ingress external \
+              --target-port "${{ env.GATEWAY_PORT }}" \
+              --transport auto \
+              --cpu 1.0 --memory 2.0Gi \
+              --min-replicas 1 --max-replicas 1 \
+              --registry-server "$REGISTRY_SERVER" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --secrets \
+                azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
+                telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
+                telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
+                gh-token='${{ secrets.GH_TOKEN }}' \
+                openai-api-key='${{ secrets.OPENAI_API_KEY }}' \
+                openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
+              --env-vars \
+                AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
+                AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
+                AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
+                OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
+                OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
+                GITHUB_REPO='${{ env.GITHUB_REPO }}' \
+                AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
+                TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
+                TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
+                GH_TOKEN=secretref:gh-token \
+                OPENAI_API_KEY=secretref:openai-api-key \
+                OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
+              >/dev/null
+          fi
+
+          # Ensure Azure Files mount is configured on the container app template.
+          # We do this here (rather than only via Portal) so future deploys keep persistence.
+          API_VERSION="2026-01-01"
+          TEMPLATE="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.template -o json)"
+          UPDATED_TEMPLATE="$(echo "$TEMPLATE" | jq --arg storageName "$ENV_STORAGE_NAME" --arg mountPath "$MOUNT_PATH" '
+            .volumes = ((.volumes // []) | map(select(.name != $storageName)) + [{"name": $storageName, "storageType": "AzureFile", "storageName": $storageName}]) |
+            .containers = (.containers | map(
+              if .name == "openclaw-gateway" then
+                .volumeMounts = (((.volumeMounts // []) | map(select(.volumeName != $storageName))) + [{"volumeName": $storageName, "mountPath": $mountPath}])
+              else
+                .
+              end
+            ))
+          ')"
+          az rest \
+            --method patch \
+            --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.App/containerapps/$APP_NAME?api-version=${API_VERSION}" \
+            --body "$(jq -n --argjson t "$UPDATED_TEMPLATE" '{properties:{template:$t}}')" \
+            >/dev/null
 
           FQDN="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
           echo "Container App FQDN: $FQDN"
