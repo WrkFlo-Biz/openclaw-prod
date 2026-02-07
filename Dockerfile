@@ -28,15 +28,19 @@ RUN apt-get update \
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
     && cd /opt/lobster && pnpm install && pnpm build && npm link
 
+# Create non-root user
+RUN groupadd -r openclaw && useradd -r -g openclaw -d /data/openclaw -s /bin/bash openclaw
+
 # Create app directory
 WORKDIR /data/openclaw
 
-# Create necessary directories
+# Create necessary directories and set ownership
 RUN mkdir -p /data/openclaw/.openclaw/workspace \
     /data/openclaw/.openclaw/logs \
     /data/openclaw/.openclaw/agents \
     /data/openclaw/.openclaw/credentials \
-    /data/openclaw/.openclaw/telegram
+    /data/openclaw/.openclaw/telegram \
+    && chown -R openclaw:openclaw /data/openclaw
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -46,6 +50,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENV HOME=/data/openclaw
 ENV OPENCLAW_HOME=/data/openclaw/.openclaw
 ENV NODE_ENV=production
+
+# Run as non-root
+USER openclaw
 
 # Gateway port (internal only - no public exposure needed for polling)
 EXPOSE 18789

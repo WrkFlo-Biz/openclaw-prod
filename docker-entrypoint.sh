@@ -58,121 +58,97 @@ if [ -z "${BOT_TOKEN_DEFAULT}" ] && [ -z "${BOT_TOKEN_MO2DRKBOT}" ]; then
   exit 1
 fi
 
-# Build accounts JSON based on available tokens
-ACCOUNTS_JSON=""
+# Build accounts object safely with jq (prevents JSON injection from env vars).
+ACCOUNTS_OBJ='{}'
 if [ -n "${BOT_TOKEN_DEFAULT}" ]; then
-  ACCOUNTS_JSON="\"default\": {
-          \"name\": \"@mo2darkbot\",
-          \"enabled\": true,
-          \"botToken\": \"${BOT_TOKEN_DEFAULT}\",
-          \"dmPolicy\": \"allowlist\",
-          \"allowFrom\": [\"7091381625\"],
-          \"dms\": {\"7091381625\": {}}
-        }"
+  ACCOUNTS_OBJ="$(echo "$ACCOUNTS_OBJ" | jq --arg token "$BOT_TOKEN_DEFAULT" '.default = {
+    "name": "@mo2darkbot",
+    "enabled": true,
+    "botToken": $token,
+    "dmPolicy": "allowlist",
+    "allowFrom": ["7091381625"],
+    "dms": {"7091381625": {}}
+  }')"
 fi
 
 if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then
-  if [ -n "${ACCOUNTS_JSON}" ]; then
-    ACCOUNTS_JSON="${ACCOUNTS_JSON},"
-  fi
-  ACCOUNTS_JSON="${ACCOUNTS_JSON}
-        \"mo2drkbot\": {
-          \"name\": \"@mo2drkbot\",
-          \"enabled\": true,
-          \"botToken\": \"${BOT_TOKEN_MO2DRKBOT}\",
-          \"dmPolicy\": \"allowlist\",
-          \"allowFrom\": [\"7091381625\"],
-          \"dms\": {\"7091381625\": {}}
-        }"
+  ACCOUNTS_OBJ="$(echo "$ACCOUNTS_OBJ" | jq --arg token "$BOT_TOKEN_MO2DRKBOT" '.mo2drkbot = {
+    "name": "@mo2drkbot",
+    "enabled": true,
+    "botToken": $token,
+    "dmPolicy": "allowlist",
+    "allowFrom": ["7091381625"],
+    "dms": {"7091381625": {}}
+  }')"
 fi
 
-# Create config from environment variables (Telegram polling mode: no webhook).
-cat > "$CONFIG_FILE" << EOF
-{
+# Build the full config JSON safely using jq (all env var values are properly escaped).
+NOW="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+jq -n \
+  --arg now "$NOW" \
+  --arg aoai_key "${AZURE_OPENAI_API_KEY}" \
+  --arg aoai_ep "${AZURE_OPENAI_ENDPOINT}" \
+  --arg aoai_ver "${AZURE_OPENAI_API_VERSION:-2024-05-01-preview}" \
+  --arg aoai_dep "${AZURE_OPENAI_DEPLOYMENT:-gpt-5-mini}" \
+  --arg acl_key "${AZURE_CLAUDE_API_KEY}" \
+  --arg acl_ep "${AZURE_CLAUDE_ENDPOINT}" \
+  --arg gh_tok "${GH_TOKEN}" \
+  --arg github_tok "${GITHUB_TOKEN}" \
+  --arg github_repo "${GITHUB_REPO:-Wrk-Flo/openclaw-prod}" \
+  --arg openai_key "${OPENAI_API_KEY}" \
+  --arg gemini_key "${GEMINI_API_KEY}" \
+  --arg gplaces_key "${GOOGLE_PLACES_API_KEY}" \
+  --arg eleven_key "${ELEVENLABS_API_KEY}" \
+  --arg gw_token "$GATEWAY_TOKEN" \
+  --arg gw_bind "$GATEWAY_BIND" \
+  --argjson gw_port "$GATEWAY_PORT" \
+  --arg config_dir "$CONFIG_DIR" \
+  --argjson accounts "$ACCOUNTS_OBJ" \
+'{
   "meta": {
     "lastTouchedVersion": "2026.2.1",
-    "lastTouchedAt": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+    "lastTouchedAt": $now
   },
   "env": {
-    "AZURE_OPENAI_API_KEY": "${AZURE_OPENAI_API_KEY}",
-    "AZURE_OPENAI_ENDPOINT": "${AZURE_OPENAI_ENDPOINT}",
-    "AZURE_OPENAI_API_VERSION": "${AZURE_OPENAI_API_VERSION:-2024-05-01-preview}",
-    "AZURE_OPENAI_DEPLOYMENT": "${AZURE_OPENAI_DEPLOYMENT:-gpt-5-mini}",
-    "AZURE_CLAUDE_API_KEY": "${AZURE_CLAUDE_API_KEY}",
-    "AZURE_CLAUDE_ENDPOINT": "${AZURE_CLAUDE_ENDPOINT}",
-    "GH_TOKEN": "${GH_TOKEN}",
-    "GITHUB_TOKEN": "${GITHUB_TOKEN}",
-    "GITHUB_REPO": "${GITHUB_REPO:-Wrk-Flo/openclaw-prod}",
-    "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-    "GEMINI_API_KEY": "${GEMINI_API_KEY}",
-    "GOOGLE_PLACES_API_KEY": "${GOOGLE_PLACES_API_KEY}",
-    "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
+    "AZURE_OPENAI_API_KEY": $aoai_key,
+    "AZURE_OPENAI_ENDPOINT": $aoai_ep,
+    "AZURE_OPENAI_API_VERSION": $aoai_ver,
+    "AZURE_OPENAI_DEPLOYMENT": $aoai_dep,
+    "AZURE_CLAUDE_API_KEY": $acl_key,
+    "AZURE_CLAUDE_ENDPOINT": $acl_ep,
+    "GH_TOKEN": $gh_tok,
+    "GITHUB_TOKEN": $github_tok,
+    "GITHUB_REPO": $github_repo,
+    "OPENAI_API_KEY": $openai_key,
+    "GEMINI_API_KEY": $gemini_key,
+    "GOOGLE_PLACES_API_KEY": $gplaces_key,
+    "ELEVENLABS_API_KEY": $eleven_key
   },
   "models": {
     "mode": "merge",
     "providers": {
       "azure-openai": {
-        "baseUrl": "${AZURE_OPENAI_ENDPOINT}openai/v1",
-        "apiKey": "${AZURE_OPENAI_API_KEY}",
+        "baseUrl": ($aoai_ep + "openai/v1"),
+        "apiKey": $aoai_key,
         "auth": "api-key",
         "api": "openai-responses",
         "models": [
-          {
-            "id": "gpt-5-mini",
-            "name": "GPT-5 mini",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            "contextWindow": 200000,
-            "maxTokens": 8192
-          },
-          {
-            "id": "gpt-5.2",
-            "name": "GPT-5.2",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            "contextWindow": 200000,
-            "maxTokens": 8192
-          },
-          {
-            "id": "gpt-5.2-codex",
-            "name": "GPT-5.2 Codex",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            "contextWindow": 200000,
-            "maxTokens": 8192
-          },
-          {
-            "id": "gpt-4o",
-            "name": "GPT-4o",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            "contextWindow": 128000,
-            "maxTokens": 4096
-          }
+          {"id": "gpt-5-mini", "name": "GPT-5 mini", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},
+          {"id": "gpt-5.2", "name": "GPT-5.2", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},
+          {"id": "gpt-5.2-codex", "name": "GPT-5.2 Codex", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},
+          {"id": "gpt-4o", "name": "GPT-4o", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 128000, "maxTokens": 4096}
         ]
       },
       "azure-claude": {
-        "baseUrl": "${AZURE_CLAUDE_ENDPOINT}/anthropic",
-        "apiKey": "${AZURE_CLAUDE_API_KEY}",
+        "baseUrl": ($acl_ep + "/anthropic"),
+        "apiKey": $acl_key,
         "api": "anthropic-messages",
         "headers": {
-          "x-api-key": "${AZURE_CLAUDE_API_KEY}",
+          "x-api-key": $acl_key,
           "anthropic-version": "2023-06-01"
         },
         "models": [
-          {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "reasoning": true,
-            "input": ["text"],
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            "contextWindow": 200000,
-            "maxTokens": 32768
-          }
+          {"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "reasoning": true, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 32768}
         ]
       }
     }
@@ -181,13 +157,9 @@ cat > "$CONFIG_FILE" << EOF
     "defaults": {
       "model": {
         "primary": "azure-claude/claude-opus-4-6",
-        "fallbacks": [
-          "azure-openai/gpt-5.2",
-          "azure-openai/gpt-4o",
-          "azure-openai/gpt-5-mini"
-        ]
+        "fallbacks": ["azure-openai/gpt-5.2", "azure-openai/gpt-4o", "azure-openai/gpt-5-mini"]
       },
-      "workspace": "$CONFIG_DIR/workspace",
+      "workspace": ($config_dir + "/workspace"),
       "maxConcurrent": 4,
       "subagents": {"maxConcurrent": 8}
     },
@@ -197,9 +169,7 @@ cat > "$CONFIG_FILE" << EOF
       {"id": "mo2drkbot", "name": "@mo2drkbot", "tools": {"profile": "full", "allow": ["llm-task"]}}
     ]
   },
-  "session": {
-    "dmScope": "per-account-channel-peer"
-  },
+  "session": {"dmScope": "per-account-channel-peer"},
   "channels": {
     "telegram": {
       "enabled": true,
@@ -207,20 +177,15 @@ cat > "$CONFIG_FILE" << EOF
       "allowFrom": ["7091381625"],
       "groupPolicy": "allowlist",
       "streamMode": "off",
-      "accounts": {
-        ${ACCOUNTS_JSON}
-      }
+      "accounts": $accounts
     }
   },
   "gateway": {
-    "port": ${GATEWAY_PORT},
+    "port": $gw_port,
     "mode": "local",
-    "bind": "${GATEWAY_BIND}",
+    "bind": $gw_bind,
     "trustedProxies": ["10.0.0.0/8", "100.100.0.0/16", "172.16.0.0/12"],
-    "auth": {
-      "mode": "token",
-      "token": "${GATEWAY_TOKEN}"
-    }
+    "auth": {"mode": "token", "token": $gw_token}
   },
   "browser": {
     "enabled": true,
@@ -232,9 +197,7 @@ cat > "$CONFIG_FILE" << EOF
     "noSandbox": true,
     "attachOnly": false,
     "executablePath": "/usr/bin/chromium",
-    "profiles": {
-      "openclaw": {"cdpPort": 18800, "color": "#FF4500"}
-    }
+    "profiles": {"openclaw": {"cdpPort": 18800, "color": "#FF4500"}}
   },
   "plugins": {
     "entries": {
@@ -260,8 +223,7 @@ cat > "$CONFIG_FILE" << EOF
       }
     }
   }
-}
-EOF
+}' > "$CONFIG_FILE"
 
 chmod 600 "$CONFIG_FILE" 2>/dev/null || true
 chmod 600 "$CONFIG_DIR/agents/main/sessions/sessions.json" 2>/dev/null || true
