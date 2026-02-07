@@ -79,13 +79,20 @@ jobs:
           # Idempotent: if the share already exists, keep going.
           az storage share-rm create -g "$RG" --storage-account "$STORAGE_ACCOUNT" --name "$FILE_SHARE" --quota 100 >/dev/null 2>&1 || true
 
-          az containerapp env storage set \
-            -g "$RG" -n "$ENV_NAME" \
-            --storage-name "$ENV_STORAGE_NAME" \
-            --access-mode ReadWrite \
-            --azure-file-account-name "$STORAGE_ACCOUNT" \
-            --azure-file-account-key "$STORAGE_KEY" \
-            --azure-file-share-name "$FILE_SHARE" >/dev/null
+          # NOTE: managed environment storage is immutable except for account key updates.
+          # Newer CLI versions will fail if we try to "set" an already-existing storage with
+          # account/share fields (even if unchanged).
+          if az containerapp env storage show -g "$RG" -n "$ENV_NAME" --storage-name "$ENV_STORAGE_NAME" >/dev/null 2>&1; then
+            echo "Env storage already configured: $ENV_STORAGE_NAME"
+          else
+            az containerapp env storage set \
+              -g "$RG" -n "$ENV_NAME" \
+              --storage-name "$ENV_STORAGE_NAME" \
+              --access-mode ReadWrite \
+              --azure-file-account-name "$STORAGE_ACCOUNT" \
+              --azure-file-account-key "$STORAGE_KEY" \
+              --azure-file-share-name "$FILE_SHARE" >/dev/null
+          fi
 
           # Prefer in-place update to avoid downtime and preserve mounted state.
           if az containerapp show -g "$RG" -n "$APP_NAME" >/dev/null 2>&1; then
