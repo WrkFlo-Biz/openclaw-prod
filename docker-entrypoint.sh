@@ -4,8 +4,13 @@ set -e
 CONFIG_DIR="/data/openclaw/.openclaw"
 CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 
+# Best-effort permissions hardening.
+# Note: Azure Files volumes often present as 0777; we still try to restrict.
+umask 077
+
 # Ensure state directories exist
 mkdir -p "$CONFIG_DIR/workspace" "$CONFIG_DIR/logs" "$CONFIG_DIR/agents" "$CONFIG_DIR/credentials" "$CONFIG_DIR/telegram"
+chmod 700 "$CONFIG_DIR" "$CONFIG_DIR/workspace" "$CONFIG_DIR/logs" "$CONFIG_DIR/agents" "$CONFIG_DIR/credentials" "$CONFIG_DIR/telegram" 2>/dev/null || true
 
 # Bot tokens from environment
 BOT_TOKEN_DEFAULT="${TELEGRAM_BOT_TOKEN_DEFAULT}"
@@ -44,8 +49,8 @@ if [ -n "${BOT_TOKEN_DEFAULT}" ]; then
           \"name\": \"@mo2darkbot\",
           \"enabled\": true,
           \"botToken\": \"${BOT_TOKEN_DEFAULT}\",
-          \"dmPolicy\": \"open\",
-          \"allowFrom\": [\"*\"],
+          \"dmPolicy\": \"allowlist\",
+          \"allowFrom\": [\"7091381625\"],
           \"dms\": {\"7091381625\": {}}
         }"
 fi
@@ -59,8 +64,8 @@ if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then
           \"name\": \"@mo2drkbot\",
           \"enabled\": true,
           \"botToken\": \"${BOT_TOKEN_MO2DRKBOT}\",
-          \"dmPolicy\": \"open\",
-          \"allowFrom\": [\"*\"],
+          \"dmPolicy\": \"allowlist\",
+          \"allowFrom\": [\"7091381625\"],
           \"dms\": {\"7091381625\": {}}
         }"
 fi
@@ -117,11 +122,14 @@ cat > "$CONFIG_FILE" << EOF
       {"id": "mo2drkbot", "name": "@mo2drkbot"}
     ]
   },
+  "session": {
+    "dmScope": "per-account-channel-peer"
+  },
   "channels": {
     "telegram": {
       "enabled": true,
-      "dmPolicy": "open",
-      "allowFrom": ["*"],
+      "dmPolicy": "allowlist",
+      "allowFrom": ["7091381625"],
       "groupPolicy": "allowlist",
       "streamMode": "off",
       "accounts": {
@@ -146,6 +154,9 @@ cat > "$CONFIG_FILE" << EOF
   }
 }
 EOF
+
+chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+chmod 600 "$CONFIG_DIR/agents/main/sessions/sessions.json" 2>/dev/null || true
 
 echo "OpenClaw config generated at $CONFIG_FILE"
 ACCOUNT_COUNT=0
