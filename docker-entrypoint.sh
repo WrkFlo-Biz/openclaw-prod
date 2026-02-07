@@ -4,6 +4,11 @@ set -e
 CONFIG_DIR="/data/openclaw/.openclaw"
 CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 
+# IMPORTANT: OpenClaw reads config/state from OPENCLAW_STATE_DIR by default (~/.openclaw).
+# In Azure Container Apps we want all state on the Azure Files mount.
+export OPENCLAW_STATE_DIR="$CONFIG_DIR"
+export OPENCLAW_CONFIG_PATH="$CONFIG_FILE"
+
 # Best-effort permissions hardening.
 # Note: Azure Files volumes often present as 0777; we still try to restrict.
 umask 077
@@ -278,4 +283,3 @@ fi
 
 # Start OpenClaw gateway
 exec openclaw gateway run --bind "${GATEWAY_BIND}" --port "${GATEWAY_PORT}"
-

@@ -188,25 +188,36 @@ jobs:
           fi
 
           # Ensure Azure Files mount is configured on the container app template.
-          # We do this here (rather than only via Portal) so future deploys keep persistence.
-          API_VERSION="2026-01-01"
-          TEMPLATE="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.template -o json)"
-          UPDATED_TEMPLATE="$(echo "$TEMPLATE" | jq --arg storageName "$ENV_STORAGE_NAME" --arg mountPath "$MOUNT_PATH" '
-            walk(if type == "object" then del(.imageType) else . end) |
-            .volumes = ((.volumes // []) | map(select(.name != $storageName)) + [{"name": $storageName, "storageType": "AzureFile", "storageName": $storageName}]) |
-            .containers = (.containers | map(
-              if .name == "openclaw-gateway" then
-                .volumeMounts = (((.volumeMounts // []) | map(select(.volumeName != $storageName))) + [{"volumeName": $storageName, "mountPath": $mountPath}])
-              else
-                .
-              end
-            ))
-          ')"
-          az rest \
-            --method patch \
-            --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.App/containerapps/$APP_NAME?api-version=${API_VERSION}" \
-            --body "$(jq -n --argjson t "$UPDATED_TEMPLATE" '{properties:{template:$t}}')" \
-            >/dev/null
+          # If the mount already exists, skip the PATCH. Azure can add template fields
+          # that are not accepted by the API version we PATCH with (e.g. customMetricsSettings).
+          MOUNT_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" --query \"properties.template.containers[0].volumeMounts[?volumeName=='$ENV_STORAGE_NAME' && mountPath=='$MOUNT_PATH'] | length(@)\" -o tsv || true)"
+          VOLUME_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" --query \"properties.template.volumes[?name=='$ENV_STORAGE_NAME'] | length(@)\" -o tsv || true)"
+          MOUNT_PRESENT="${MOUNT_PRESENT:-0}"
+          VOLUME_PRESENT="${VOLUME_PRESENT:-0}"
+
+          if [ "$MOUNT_PRESENT" -ge 1 ] && [ "$VOLUME_PRESENT" -ge 1 ]; then
+            echo "Azure Files mount already present; skipping template patch."
+          else
+            echo "Azure Files mount missing; applying template patch."
+            API_VERSION="2026-01-01"
+            TEMPLATE="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.template -o json)"
+            UPDATED_TEMPLATE="$(echo "$TEMPLATE" | jq --arg storageName "$ENV_STORAGE_NAME" --arg mountPath "$MOUNT_PATH" '
+              walk(if type == "object" then del(.imageType, .customMetricsSettings) else . end) |
+              .volumes = ((.volumes // []) | map(select(.name != $storageName)) + [{"name": $storageName, "storageType": "AzureFile", "storageName": $storageName}]) |
+              .containers = (.containers | map(
+                if .name == "openclaw-gateway" then
+                  .volumeMounts = (((.volumeMounts // []) | map(select(.volumeName != $storageName))) + [{"volumeName": $storageName, "mountPath": $mountPath}])
+                else
+                  .
+                end
+              ))
+            ')"
+            az rest \
+              --method patch \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.App/containerapps/$APP_NAME?api-version=${API_VERSION}" \
+              --body "$(jq -n --argjson t "$UPDATED_TEMPLATE" '{properties:{template:$t}}')" \
+              >/dev/null
+          fi
 
           FQDN="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
           echo "Container App FQDN: $FQDN"
