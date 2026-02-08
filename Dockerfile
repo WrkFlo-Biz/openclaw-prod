@@ -93,7 +93,11 @@ RUN mkdir -p /data/openclaw/.openclaw/workspace \
     /data/openclaw/.openclaw/agents \
     /data/openclaw/.openclaw/credentials \
     /data/openclaw/.openclaw/telegram \
+    /data/openclaw/.openclaw/slack \
     && chown -R openclaw:openclaw /data/openclaw
+
+# Copy agent workspace seed files
+COPY agents/ /opt/openclaw-agents/
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/

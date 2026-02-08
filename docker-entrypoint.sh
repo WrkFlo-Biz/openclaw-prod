@@ -42,6 +42,23 @@ else
   touch "$CONFIG_DIR/.sessions-cleared-v2"
 fi
 
+
+# Seed agent workspace files from git repo into persistent storage.
+# Always overwrite so workspaces stay in sync with the repo.
+AGENT_SRC_DIR="/opt/openclaw-agents"
+seed_agent_workspace() {
+  local agent_id="$1"
+  local ws_dir="$CONFIG_DIR/workspace-${agent_id}"
+  mkdir -p "$ws_dir"
+  if [ -d "$AGENT_SRC_DIR/$agent_id" ]; then
+    cp "$AGENT_SRC_DIR/$agent_id/"*.md "$ws_dir/" 2>/dev/null || true
+    echo "Seeded workspace for $agent_id"
+  fi
+}
+
+seed_agent_workspace "mo2darkbot"
+seed_agent_workspace "mo2drkbot"
+
 # Bot tokens from environment
 BOT_TOKEN_DEFAULT="${TELEGRAM_BOT_TOKEN_DEFAULT}"
 BOT_TOKEN_MO2DRKBOT="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
