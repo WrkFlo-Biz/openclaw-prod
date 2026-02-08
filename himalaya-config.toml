@@ -1,0 +1,16 @@
+[accounts.gmail]
+email = "mo2dark@gmail.com"
+display-name = "Moses"
+default = true
+
+[accounts.gmail.imap]
+host = "imap.gmail.com"
+port = 993
+login = "mo2dark@gmail.com"
+passwd.cmd = "echo ${GMAIL_APP_PASSWORD}"
+
+[accounts.gmail.smtp]
+host = "smtp.gmail.com"
+port = 587
+login = "mo2dark@gmail.com"
+passwd.cmd = "echo ${GMAIL_APP_PASSWORD}"

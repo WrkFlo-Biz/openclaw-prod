@@ -25,6 +25,7 @@ RUN apt-get update \
        @google/gemini-cli \
        @openai/codex \
        clawhub \
+       gmail-mcp-imap \
        mcporter \
        openclaw@latest \
        pnpm \
@@ -99,6 +100,10 @@ RUN mkdir -p /data/openclaw/.openclaw/workspace \
 
 # Copy agent workspace seed files
 COPY agents/ /opt/openclaw-agents/
+
+# Copy mcporter and himalaya config templates (credentials injected at runtime)
+COPY mcporter-config.json /opt/mcporter-config.json
+COPY himalaya-config.toml /opt/himalaya-config.toml
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/

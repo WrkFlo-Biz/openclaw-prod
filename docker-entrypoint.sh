@@ -59,6 +59,26 @@ seed_agent_workspace() {
 seed_agent_workspace "mo2darkbot"
 seed_agent_workspace "mo2drkbot"
 
+# Configure mcporter with Gmail MCP server credentials
+if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
+  mkdir -p "$HOME/.mcporter"
+  sed "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
+  chmod 600 "$HOME/.mcporter/config.json" 2>/dev/null || true
+  echo "mcporter Gmail server configured for mo2dark@gmail.com"
+else
+  echo "GMAIL_APP_PASSWORD not set — skipping mcporter Gmail config"
+fi
+
+# Configure himalaya email client
+if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
+  mkdir -p "$HOME/.config/himalaya"
+  sed "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" /opt/himalaya-config.toml > "$HOME/.config/himalaya/config.toml"
+  chmod 600 "$HOME/.config/himalaya/config.toml" 2>/dev/null || true
+  echo "Himalaya email client configured for mo2dark@gmail.com"
+else
+  echo "GMAIL_APP_PASSWORD not set — skipping himalaya config"
+fi
+
 # Bot tokens from environment
 BOT_TOKEN_DEFAULT="${TELEGRAM_BOT_TOKEN_DEFAULT}"
 BOT_TOKEN_MO2DRKBOT="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
@@ -227,7 +247,6 @@ jq -n \
       "subagents": {"maxConcurrent": 8}
     },
     "list": [
-      {"id": "main", "tools": {"profile": "full", "allow": ["llm-task"]}},
       {"id": "mo2darkbot", "name": "@mo2darkbot", "tools": {"profile": "full", "allow": ["llm-task"]}},
       {"id": "mo2drkbot", "name": "@mo2drkbot", "tools": {"profile": "full", "allow": ["llm-task"]}}
     ]

@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "google-workspace": {
+      "command": "npx",
+      "args": ["gmail-mcp-imap"],
+      "env": {
+        "GMAIL_USER": "mo2dark@gmail.com",
+        "GMAIL_APP_PASSWORD": "${GMAIL_APP_PASSWORD}"
+      }
+    }
+  }
+}
