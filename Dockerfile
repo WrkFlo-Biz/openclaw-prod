@@ -30,14 +30,9 @@ RUN apt-get update \
 RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     if [ -d "$OPENCLAW_DIR/dist" ]; then \
-      for f in $(rg -l --glob '*.js' 'await\\s+fs\\.chmod\\([^\\)]*,\\s*(0o600|384)\\);' "$OPENCLAW_DIR/dist" || true); do \
-        sed -i -E 's/await[[:space:]]+fs\\.chmod\\(([^,]+),[[:space:]]*(0o600|384)\\);/await fs.chmod(\\1, \\2).catch(() => {});/g' "$f"; \
-      done; \
-      for f in $(rg -l --glob '*.js' 'await\\s+fs\\.promises\\.chmod\\([^\\)]*,\\s*(0o600|384)\\);' "$OPENCLAW_DIR/dist" || true); do \
-        sed -i -E 's/await[[:space:]]+fs\\.promises\\.chmod\\(([^,]+),[[:space:]]*(0o600|384)\\);/await fs.promises.chmod(\\1, \\2).catch(() => {});/g' "$f"; \
-      done; \
-      for f in $(rg -l --glob '*.js' 'await\\s+deps\\.fs\\.promises\\.chmod\\([^\\)]*,\\s*(0o600|384)\\);' "$OPENCLAW_DIR/dist" || true); do \
-        sed -i -E 's/await[[:space:]]+deps\\.fs\\.promises\\.chmod\\(([^,]+),[[:space:]]*(0o600|384)\\);/await deps.fs.promises.chmod(\\1, \\2).catch(() => {});/g' "$f"; \
+      # Covers bundled variants like fs$1.chmod, fs.promises.chmod, deps.fs.promises.chmod, etc.
+      for f in $(rg -l --glob '*.js' 'await\\s+[A-Za-z0-9_$.]+\\.chmod\\([^;]*,\\s*(0o600|384)\\);' "$OPENCLAW_DIR/dist" || true); do \
+        sed -i -E 's/await[[:space:]]+([A-Za-z0-9_$.]+)\\.chmod\\(([^;]*),[[:space:]]*(0o600|384)\\);/await \\1.chmod(\\2, \\3).catch(() => {});/g' "$f"; \
       done; \
     fi
 
