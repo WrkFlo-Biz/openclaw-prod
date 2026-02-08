@@ -143,7 +143,7 @@ jq -n \
         "baseUrl": ($aoai_ep + "openai/v1"),
         "apiKey": $aoai_key,
         "auth": "api-key",
-        "api": "openai-chat",
+        "api": "openai-completions",
         "models": [
           {"id": "gpt-5-mini", "name": "GPT-5 mini", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},
           {"id": "gpt-5.2", "name": "GPT-5.2", "reasoning": false, "input": ["text"], "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}, "contextWindow": 200000, "maxTokens": 8192},
