@@ -19,14 +19,16 @@ mkdir -p \
   "$CONFIG_DIR/logs" \
   "$CONFIG_DIR/agents" \
   "$CONFIG_DIR/credentials" \
-  "$CONFIG_DIR/telegram"
+  "$CONFIG_DIR/telegram" \
+  "$CONFIG_DIR/slack"
 
 chmod 700 "$CONFIG_DIR" \
   "$CONFIG_DIR/workspace" \
   "$CONFIG_DIR/logs" \
   "$CONFIG_DIR/agents" \
   "$CONFIG_DIR/credentials" \
-  "$CONFIG_DIR/telegram" 2>/dev/null || true
+  "$CONFIG_DIR/telegram" \
+  "$CONFIG_DIR/slack" 2>/dev/null || true
 
 # One-time: clear stale sessions after model switch (Claude -> GPT-5-mini).
 # Old sessions reference response IDs from the previous model's Responses API
@@ -70,7 +72,7 @@ if [ -z "${BOT_TOKEN_DEFAULT}" ] && [ -z "${BOT_TOKEN_MO2DRKBOT}" ]; then
   exit 1
 fi
 
-# Build accounts object safely with jq (prevents JSON injection from env vars).
+# Build Telegram accounts object safely with jq (prevents JSON injection from env vars).
 ACCOUNTS_OBJ='{}'
 if [ -n "${BOT_TOKEN_DEFAULT}" ]; then
   ACCOUNTS_OBJ="$(echo "$ACCOUNTS_OBJ" | jq --arg token "$BOT_TOKEN_DEFAULT" '.default = {
@@ -94,6 +96,33 @@ if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then
   }')"
 fi
 
+# Build Slack channel config if tokens are provided
+SLACK_CONFIG='null'
+if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+  SLACK_CONFIG="$(jq -n \
+    --arg bot_token "${SLACK_BOT_TOKEN}" \
+    --arg app_token "${SLACK_APP_TOKEN:-}" \
+  '{
+    "enabled": true,
+    "botToken": $bot_token,
+    "appToken": $app_token,
+    "dm": {
+      "enabled": true,
+      "policy": "allowlist",
+      "allowFrom": ["*"]
+    },
+    "channels": {},
+    "replyToMode": "all",
+    "actions": {
+      "reactions": true,
+      "messages": true,
+      "pins": true,
+      "memberInfo": true,
+      "emojiList": true
+    }
+  }')"
+fi
+
 # Build the full config JSON safely using jq (all env var values are properly escaped).
 NOW="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 jq -n \
@@ -111,11 +140,13 @@ jq -n \
   --arg gemini_key "${GEMINI_API_KEY}" \
   --arg gplaces_key "${GOOGLE_PLACES_API_KEY}" \
   --arg eleven_key "${ELEVENLABS_API_KEY}" \
+  --arg gmail_pw "${GMAIL_APP_PASSWORD}" \
   --arg gw_token "$GATEWAY_TOKEN" \
   --arg gw_bind "$GATEWAY_BIND" \
   --argjson gw_port "$GATEWAY_PORT" \
   --arg config_dir "$CONFIG_DIR" \
   --argjson accounts "$ACCOUNTS_OBJ" \
+  --argjson slack_config "$SLACK_CONFIG" \
 '{
   "meta": {
     "lastTouchedVersion": "2026.2.1",
@@ -134,7 +165,8 @@ jq -n \
     "OPENAI_API_KEY": $openai_key,
     "GEMINI_API_KEY": $gemini_key,
     "GOOGLE_PLACES_API_KEY": $gplaces_key,
-    "ELEVENLABS_API_KEY": $eleven_key
+    "ELEVENLABS_API_KEY": $eleven_key,
+    "GMAIL_APP_PASSWORD": $gmail_pw
   },
   "models": {
     "mode": "merge",
@@ -182,16 +214,18 @@ jq -n \
     ]
   },
   "session": {"dmScope": "per-account-channel-peer"},
-  "channels": {
-    "telegram": {
-      "enabled": true,
-      "dmPolicy": "allowlist",
-      "allowFrom": ["7091381625"],
-      "groupPolicy": "allowlist",
-      "streamMode": "off",
-      "accounts": $accounts
-    }
-  },
+  "channels": (
+    {
+      "telegram": {
+        "enabled": true,
+        "dmPolicy": "allowlist",
+        "allowFrom": ["7091381625"],
+        "groupPolicy": "allowlist",
+        "streamMode": "off",
+        "accounts": $accounts
+      }
+    } + (if $slack_config != null then {"slack": $slack_config} else {} end)
+  ),
   "gateway": {
     "port": $gw_port,
     "mode": "local",
@@ -214,6 +248,7 @@ jq -n \
   "plugins": {
     "entries": {
       "telegram": {"enabled": true},
+      "slack": (if $slack_config != null then {"enabled": true} else {"enabled": false} end),
       "lobster": {"enabled": true},
       "voice-call": {"enabled": true},
       "llm-task": {
@@ -245,6 +280,11 @@ ACCOUNT_COUNT=0
 if [ -n "${BOT_TOKEN_DEFAULT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
 if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
 echo "Configured Telegram accounts: ${ACCOUNT_COUNT}"
+if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+  echo "Slack channel: enabled (socket mode)"
+else
+  echo "Slack channel: disabled (no SLACK_BOT_TOKEN)"
+fi
 echo "Configured agent primary model: azure-openai/gpt-5-mini"
 echo "Configured agent fallbacks: azure-openai/gpt-5.2, azure-openai/gpt-4o, azure-claude/claude-opus-4-6"
 echo "Gateway bind mode: ${GATEWAY_BIND} (port ${GATEWAY_PORT})"
