@@ -91,6 +91,8 @@ WORKDIR /data/openclaw
 
 # Create necessary directories and set ownership
 RUN mkdir -p /data/openclaw/.openclaw/workspace \
+    /data/openclaw/.openclaw/workspace/memory \
+    /data/openclaw/.openclaw/memory-index \
     /data/openclaw/.openclaw/logs \
     /data/openclaw/.openclaw/agents \
     /data/openclaw/.openclaw/credentials \

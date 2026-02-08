@@ -16,6 +16,8 @@ umask 077
 # Ensure state directories exist
 mkdir -p \
   "$CONFIG_DIR/workspace" \
+  "$CONFIG_DIR/workspace/memory" \
+  "$CONFIG_DIR/memory-index" \
   "$CONFIG_DIR/logs" \
   "$CONFIG_DIR/agents" \
   "$CONFIG_DIR/credentials" \
@@ -244,7 +246,23 @@ jq -n \
       },
       "workspace": ($config_dir + "/workspace"),
       "maxConcurrent": 4,
-      "subagents": {"maxConcurrent": 8}
+      "subagents": {"maxConcurrent": 8},
+      "memorySearch": {
+        "enabled": true,
+        "provider": "gemini",
+        "model": "gemini-embedding-001",
+        "fallback": "none",
+        "sources": ["memory"],
+        "store": {
+          "path": ($config_dir + "/memory-index"),
+          "vector": {"enabled": true}
+        },
+        "sync": {
+          "onSessionStart": true,
+          "onSearch": true,
+          "watch": false
+        }
+      }
     },
     "list": [
       {"id": "mo2darkbot", "name": "@mo2darkbot", "tools": {"profile": "full", "allow": ["llm-task"]}},
