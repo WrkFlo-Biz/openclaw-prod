@@ -237,6 +237,13 @@ jobs:
               >/dev/null
           fi
 
+          # Deactivate old revisions to prevent duplicate Telegram bot polling (409 conflicts).
+          CURRENT_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestRevisionName -o tsv)"
+          for OLD_REV in $(az containerapp revision list -g "$RG" -n "$APP_NAME" --query "[?name!='${CURRENT_REV}' && properties.active].name" -o tsv); do
+            echo "Deactivating old revision: $OLD_REV"
+            az containerapp revision deactivate -g "$RG" -n "$APP_NAME" --revision "$OLD_REV" >/dev/null || true
+          done
+
           FQDN="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
           echo "Container App FQDN: $FQDN"
 
