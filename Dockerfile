@@ -6,12 +6,12 @@ LABEL description="OpenClaw Production Container"
 # Install runtime dependencies required by key OpenClaw skills.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+       build-essential \
        ca-certificates \
        curl \
        ffmpeg \
        gh \
        git \
-       golang-go \
        jq \
        python3 \
        python3-pip \
@@ -29,9 +29,10 @@ RUN apt-get update \
        pnpm \
        summarize
 
-# Install Go-based CLIs (wacli has no Linux release, build from source)
-RUN GOBIN=/usr/local/bin go install github.com/steipete/wacli/cmd/wacli@latest \
-    && rm -rf /root/go
+# Install Go 1.23, build wacli from source, then remove Go to save space
+RUN curl -fsSL https://go.dev/dl/go1.23.6.linux-amd64.tar.gz | tar xz -C /usr/local \
+    && GOBIN=/usr/local/bin /usr/local/go/bin/go install github.com/steipete/wacli/cmd/wacli@latest \
+    && rm -rf /root/go /usr/local/go
 
 # Install binary CLIs from GitHub releases (Linux amd64)
 RUN set -eux; \
