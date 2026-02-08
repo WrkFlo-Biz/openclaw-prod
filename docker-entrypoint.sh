@@ -156,8 +156,8 @@ jq -n \
   "agents": {
     "defaults": {
       "model": {
-        "primary": "azure-claude/claude-opus-4-6",
-        "fallbacks": ["azure-openai/gpt-5.2", "azure-openai/gpt-4o", "azure-openai/gpt-5-mini"]
+        "primary": "azure-openai/gpt-5-mini",
+        "fallbacks": ["azure-openai/gpt-5.2", "azure-openai/gpt-4o", "azure-claude/claude-opus-4-6"]
       },
       "workspace": ($config_dir + "/workspace"),
       "maxConcurrent": 4,
@@ -207,8 +207,8 @@ jq -n \
       "llm-task": {
         "enabled": true,
         "config": {
-          "defaultProvider": "azure-claude",
-          "defaultModel": "claude-opus-4-6",
+          "defaultProvider": "azure-openai",
+          "defaultModel": "gpt-5-mini",
           "defaultAuthProfileId": "main",
           "allowedModels": [
             "azure-claude/claude-opus-4-6",
@@ -233,8 +233,8 @@ ACCOUNT_COUNT=0
 if [ -n "${BOT_TOKEN_DEFAULT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
 if [ -n "${BOT_TOKEN_MO2DRKBOT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi
 echo "Configured Telegram accounts: ${ACCOUNT_COUNT}"
-echo "Configured agent primary model: azure-claude/claude-opus-4-6"
-echo "Configured agent fallbacks: azure-openai/gpt-5.2, azure-openai/gpt-4o, azure-openai/gpt-5-mini"
+echo "Configured agent primary model: azure-openai/gpt-5-mini"
+echo "Configured agent fallbacks: azure-openai/gpt-5.2, azure-openai/gpt-4o, azure-claude/claude-opus-4-6"
 echo "Gateway bind mode: ${GATEWAY_BIND} (port ${GATEWAY_PORT})"
 if [ -n "${GH_TOKEN:-}" ]; then
   echo "GitHub token configured for skill runtime"
