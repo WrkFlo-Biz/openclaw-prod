@@ -158,6 +158,7 @@ jq -n \
   --arg gplaces_key "${GOOGLE_PLACES_API_KEY}" \
   --arg eleven_key "${ELEVENLABS_API_KEY}" \
   --arg gmail_pw "${GMAIL_APP_PASSWORD}" \
+  --arg brave_key "${BRAVE_API_KEY:-}" \
   --arg gw_token "$GATEWAY_TOKEN" \
   --arg gw_bind "$GATEWAY_BIND" \
   --argjson gw_port "$GATEWAY_PORT" \
@@ -183,7 +184,8 @@ jq -n \
     "GEMINI_API_KEY": $gemini_key,
     "GOOGLE_PLACES_API_KEY": $gplaces_key,
     "ELEVENLABS_API_KEY": $eleven_key,
-    "GMAIL_APP_PASSWORD": $gmail_pw
+    "GMAIL_APP_PASSWORD": $gmail_pw,
+    "BRAVE_API_KEY": $brave_key
   },
   "models": {
     "mode": "merge",

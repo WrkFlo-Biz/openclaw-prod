@@ -120,6 +120,7 @@ jobs:
                 gmail-app-password='${{ secrets.GMAIL_APP_PASSWORD }}' \
                 slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
                 slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
+                brave-api-key='${{ secrets.BRAVE_API_KEY }}' \
               >/dev/null
 
             az containerapp update \
@@ -147,6 +148,7 @@ jobs:
                 GMAIL_APP_PASSWORD=secretref:gmail-app-password \
                 SLACK_BOT_TOKEN=secretref:slack-bot-token \
                 SLACK_APP_TOKEN=secretref:slack-app-token \
+                BRAVE_API_KEY=secretref:brave-api-key \
               >/dev/null
           else
             echo "Creating container app: $APP_NAME"
@@ -176,6 +178,7 @@ jobs:
                 gmail-app-password='${{ secrets.GMAIL_APP_PASSWORD }}' \
                 slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
                 slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
+                brave-api-key='${{ secrets.BRAVE_API_KEY }}' \
               --env-vars \
                 AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
                 AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
@@ -198,6 +201,7 @@ jobs:
                 GMAIL_APP_PASSWORD=secretref:gmail-app-password \
                 SLACK_BOT_TOKEN=secretref:slack-bot-token \
                 SLACK_APP_TOKEN=secretref:slack-app-token \
+                BRAVE_API_KEY=secretref:brave-api-key \
               >/dev/null
           fi
 
