@@ -27,12 +27,12 @@ RUN apt-get update \
 # Azure Files (SMB) mounts in Azure Container Apps commonly reject chmod/chown.
 # OpenClaw hardens file perms (0600) for session and Telegram offset stores; treat chmod as best-effort
 # so the gateway doesn't fail on EPERM in cloud-mounted volumes.
+# NOTE: single backslashes inside single quotes — no double-escaping needed.
 RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     if [ -d "$OPENCLAW_DIR/dist" ]; then \
-      # Covers bundled variants like fs$1.chmod, fs.promises.chmod, deps.fs.promises.chmod, etc.
-      for f in $(rg -l --glob '*.js' 'await\\s+[A-Za-z0-9_$.]+\\.chmod\\([^;]*,\\s*(0o600|384)\\);' "$OPENCLAW_DIR/dist" || true); do \
-        sed -i -E 's/await[[:space:]]+([A-Za-z0-9_$.]+)\\.chmod\\(([^;]*),[[:space:]]*(0o600|384)\\);/await \\1.chmod(\\2, \\3).catch(() => {});/g' "$f"; \
+      for f in $(rg -l --glob '*.js' 'await\s+[A-Za-z0-9_$.]+\.chmod\([^;]*,\s*(0o600|384)\);' "$OPENCLAW_DIR/dist" || true); do \
+        sed -i -E 's/await[[:space:]]+([A-Za-z0-9_$.]+)\.chmod\(([^;]*),[[:space:]]*(0o600|384)\);/await \1.chmod(\2, \3).catch(() => {});/g' "$f"; \
       done; \
     fi
 
