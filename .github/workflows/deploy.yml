@@ -117,6 +117,9 @@ jobs:
                 google-places-api-key='${{ secrets.GOOGLE_PLACES_API_KEY }}' \
                 elevenlabs-api-key='${{ secrets.ELEVENLABS_API_KEY }}' \
                 openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
+                gmail-app-password='${{ secrets.GMAIL_APP_PASSWORD }}' \
+                slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
+                slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
               >/dev/null
 
             az containerapp update \
@@ -130,6 +133,7 @@ jobs:
                 OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
                 OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
                 GITHUB_REPO='${{ env.GITHUB_REPO }}' \
+                OPENCLAW_MEMORY_DB_PATH='/data/local-memory' \
                 AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
                 AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
                 TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
@@ -140,6 +144,9 @@ jobs:
                 GOOGLE_PLACES_API_KEY=secretref:google-places-api-key \
                 ELEVENLABS_API_KEY=secretref:elevenlabs-api-key \
                 OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
+                GMAIL_APP_PASSWORD=secretref:gmail-app-password \
+                SLACK_BOT_TOKEN=secretref:slack-bot-token \
+                SLACK_APP_TOKEN=secretref:slack-app-token \
               >/dev/null
           else
             echo "Creating container app: $APP_NAME"
@@ -166,6 +173,9 @@ jobs:
                 google-places-api-key='${{ secrets.GOOGLE_PLACES_API_KEY }}' \
                 elevenlabs-api-key='${{ secrets.ELEVENLABS_API_KEY }}' \
                 openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
+                gmail-app-password='${{ secrets.GMAIL_APP_PASSWORD }}' \
+                slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
+                slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
               --env-vars \
                 AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
                 AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
@@ -174,6 +184,7 @@ jobs:
                 OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
                 OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
                 GITHUB_REPO='${{ env.GITHUB_REPO }}' \
+                OPENCLAW_MEMORY_DB_PATH='/data/local-memory' \
                 AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
                 AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
                 TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
@@ -184,6 +195,9 @@ jobs:
                 GOOGLE_PLACES_API_KEY=secretref:google-places-api-key \
                 ELEVENLABS_API_KEY=secretref:elevenlabs-api-key \
                 OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
+                GMAIL_APP_PASSWORD=secretref:gmail-app-password \
+                SLACK_BOT_TOKEN=secretref:slack-bot-token \
+                SLACK_APP_TOKEN=secretref:slack-app-token \
               >/dev/null
           fi
 
