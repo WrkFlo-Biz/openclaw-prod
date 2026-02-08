@@ -28,6 +28,18 @@ chmod 700 "$CONFIG_DIR" \
   "$CONFIG_DIR/credentials" \
   "$CONFIG_DIR/telegram" 2>/dev/null || true
 
+# One-time: clear stale sessions after model switch (Claude -> GPT-5-mini).
+# Old sessions reference response IDs from the previous model's Responses API
+# that the new model can't resolve, causing HTTP 400 errors.
+# Remove this block after the first successful deploy.
+if [ -f "$CONFIG_DIR/.sessions-cleared-v2" ]; then
+  echo "Sessions already cleared for model switch."
+else
+  echo "Clearing stale sessions for model switch..."
+  find "$CONFIG_DIR/agents" -name "sessions.json" -delete 2>/dev/null || true
+  touch "$CONFIG_DIR/.sessions-cleared-v2"
+fi
+
 # Bot tokens from environment
 BOT_TOKEN_DEFAULT="${TELEGRAM_BOT_TOKEN_DEFAULT}"
 BOT_TOKEN_MO2DRKBOT="${TELEGRAM_BOT_TOKEN_MO2DRKBOT}"
