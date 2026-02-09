@@ -45,6 +45,15 @@ else
   touch "$CONFIG_DIR/.sessions-cleared-v3"
 fi
 
+# One-time: nuke OpenAI-based memory index so it rebuilds with Gemini embeddings.
+if [ -f "$CONFIG_DIR/.memory-index-reset-gemini" ]; then
+  echo "Memory index already reset for Gemini embeddings."
+else
+  echo "Resetting memory index to force Gemini embeddings rebuild..."
+  rm -rf "$CONFIG_DIR/memory-index/"*.db "$CONFIG_DIR/memory-index/"*.db-* 2>/dev/null || true
+  touch "$CONFIG_DIR/.memory-index-reset-gemini"
+fi
+
 
 # Seed agent workspace files from git repo into persistent storage.
 # Always overwrite so workspaces stay in sync with the repo.
@@ -349,6 +358,8 @@ else
 fi
 echo "Configured agent primary model: azure-openai/gpt-5-mini"
 echo "Configured agent fallbacks: azure-openai/gpt-5.2, azure-openai/gpt-4o, azure-claude/claude-opus-4-6"
+echo "Configured memorySearch provider: gemini (model: gemini-embedding-001)"
+echo "GEMINI_API_KEY present: $([ -n "${GEMINI_API_KEY:-}" ] && echo 'yes' || echo 'NO — embeddings will fail!')"
 echo "Gateway bind mode: ${GATEWAY_BIND} (port ${GATEWAY_PORT})"
 if [ -n "${GH_TOKEN:-}" ]; then
   echo "GitHub token configured for skill runtime"
