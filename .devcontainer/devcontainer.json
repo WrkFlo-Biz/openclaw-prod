@@ -1,0 +1,35 @@
+{
+  "name": "OpenClaw Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" }
+  },
+  "postCreateCommand": "npm install -g openclaw@latest pnpm mcporter claude-code && az extension add --name containerapp --upgrade 2>/dev/null || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-azurecontainerapps",
+        "ms-vscode.azure-account",
+        "GitHub.copilot",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "secrets": {
+    "AZURE_CLIENT_ID": { "description": "Azure SP client ID for az login" },
+    "AZURE_CLIENT_SECRET": { "description": "Azure SP client secret" },
+    "AZURE_SUBSCRIPTION_ID": { "description": "Azure subscription ID" },
+    "AZURE_TENANT_ID": { "description": "Azure tenant ID" }
+  },
+  "postStartCommand": "if [ -n \"${AZURE_CLIENT_ID:-}\" ]; then az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID > /dev/null 2>&1 && echo 'Azure: logged in'; fi",
+  "forwardPorts": [18789],
+  "remoteEnv": {
+    "OPENCLAW_GATEWAY_TOKEN": "${localEnv:OPENCLAW_GATEWAY_TOKEN}"
+  }
+}
