@@ -74,14 +74,27 @@ seed_agent_workspace "mo2drkbot"
 # Configure mcporter with gmail-mcp-imap (app password, no OAuth needed)
 # Write to all locations mcporter/openclaw might look for config
 if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
+  # Normalize app passwords copied with spaces (Google shows them grouped).
+  GMAIL_APP_PASSWORD="${GMAIL_APP_PASSWORD//[[:space:]]/}"
+  export GMAIL_APP_PASSWORD
+
+  # Allow overriding the Gmail address; default to the bot mailbox.
+  GMAIL_EMAIL="${GMAIL_EMAIL:-mo2darkbot@gmail.com}"
+  export GMAIL_EMAIL
+
+  if [ "${#GMAIL_APP_PASSWORD}" -ne 16 ]; then
+    echo "WARNING: GMAIL_APP_PASSWORD length is ${#GMAIL_APP_PASSWORD} (expected 16 for Google App Password)."
+  fi
+
   mkdir -p "$HOME/.mcporter" "$CONFIG_DIR/config"
   sed -e "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" \
+      -e "s|mo2dark@gmail.com|${GMAIL_EMAIL}|g" \
       /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
   cp "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json"
   cp "$HOME/.mcporter/config.json" "$CONFIG_DIR/config/mcporter.json"
   chmod 600 "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json" \
             "$CONFIG_DIR/config/mcporter.json" 2>/dev/null || true
-  echo "mcporter gmail-mcp-imap configured for mo2dark@gmail.com (app password)"
+  echo "mcporter gmail-mcp-imap configured for ${GMAIL_EMAIL} (app password)"
 else
   echo "GMAIL_APP_PASSWORD not set — skipping mcporter gmail config"
 fi
@@ -89,9 +102,11 @@ fi
 # Configure himalaya email client
 if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
   mkdir -p "$HOME/.config/himalaya"
-  sed "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" /opt/himalaya-config.toml > "$HOME/.config/himalaya/config.toml"
+  sed -e "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" \
+      -e "s|mo2dark@gmail.com|${GMAIL_EMAIL}|g" \
+      /opt/himalaya-config.toml > "$HOME/.config/himalaya/config.toml"
   chmod 600 "$HOME/.config/himalaya/config.toml" 2>/dev/null || true
-  echo "Himalaya email client configured for mo2dark@gmail.com"
+  echo "Himalaya email client configured for ${GMAIL_EMAIL}"
 else
   echo "GMAIL_APP_PASSWORD not set — skipping himalaya config"
 fi
