@@ -107,9 +107,11 @@ COPY agents/ /opt/openclaw-agents/
 COPY mcporter-config.json /opt/mcporter-config.json
 COPY himalaya-config.toml /opt/himalaya-config.toml
 
-# Copy entrypoint script
+# Copy ops scripts and entrypoint
+COPY scripts/self-ops.sh /usr/local/bin/self-ops
+COPY scripts/ops.sh /usr/local/bin/openclaw-ops
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/self-ops /usr/local/bin/openclaw-ops
 
 # Set environment variables
 ENV HOME=/data/openclaw
