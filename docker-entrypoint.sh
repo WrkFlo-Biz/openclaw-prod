@@ -18,6 +18,7 @@ mkdir -p \
   "$CONFIG_DIR/workspace" \
   "$CONFIG_DIR/workspace/memory" \
   "$CONFIG_DIR/memory-index" \
+  "$CONFIG_DIR/memory-db" \
   "$CONFIG_DIR/logs" \
   "$CONFIG_DIR/agents" \
   "$CONFIG_DIR/credentials" \
@@ -36,12 +37,12 @@ chmod 700 "$CONFIG_DIR" \
 # Old sessions reference response IDs from the previous model's Responses API
 # that the new model can't resolve, causing HTTP 400 errors.
 # Remove this block after the first successful deploy.
-if [ -f "$CONFIG_DIR/.sessions-cleared-v2" ]; then
-  echo "Sessions already cleared for model switch."
+if [ -f "$CONFIG_DIR/.sessions-cleared-v3" ]; then
+  echo "Sessions already cleared (v3: identity fix + per-agent workspace)."
 else
-  echo "Clearing stale sessions for model switch..."
+  echo "Clearing stale sessions for identity fix..."
   find "$CONFIG_DIR/agents" -name "sessions.json" -delete 2>/dev/null || true
-  touch "$CONFIG_DIR/.sessions-cleared-v2"
+  touch "$CONFIG_DIR/.sessions-cleared-v3"
 fi
 
 
@@ -295,8 +296,8 @@ jq -n \
       }
     },
     "list": [
-      {"id": "mo2darkbot", "name": "@mo2darkbot", "tools": {"profile": "full", "allow": ["llm-task"]}},
-      {"id": "mo2drkbot", "name": "@mo2drkbot", "tools": {"profile": "full", "allow": ["llm-task"]}}
+      {"id": "mo2darkbot", "name": "@mo2darkbot", "workspace": ($config_dir + "/workspace-mo2darkbot"), "tools": {"profile": "full", "allow": ["llm-task"]}},
+      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "tools": {"profile": "full", "allow": ["llm-task"]}}
     ]
   },
   "session": {"dmScope": "per-account-channel-peer"},
