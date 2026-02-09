@@ -64,8 +64,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/uv \
     && mv /root/.local/bin/uvx /usr/local/bin/uvx 2>/dev/null || true
 
-# Install OpenAI Whisper (local speech-to-text)
-RUN pip3 install --no-cache-dir --break-system-packages openai-whisper
+# Install Python packages (Whisper for speech-to-text, workspace-mcp for Gmail OAuth)
+RUN pip3 install --no-cache-dir --break-system-packages openai-whisper workspace-mcp
 
 # Azure Files (SMB) mounts in Azure Container Apps commonly reject chmod/chown.
 # OpenClaw hardens file perms (0600) for session and Telegram offset stores; treat chmod as best-effort

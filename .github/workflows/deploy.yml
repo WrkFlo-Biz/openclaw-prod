@@ -121,6 +121,9 @@ jobs:
                 slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
                 slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
                 brave-api-key='${{ secrets.BRAVE_API_KEY }}' \
+                google-oauth-client-id='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}' \
+                google-oauth-client-secret='${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}' \
+                google-oauth-refresh-token='${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}' \
               >/dev/null
 
             az containerapp update \
@@ -149,6 +152,9 @@ jobs:
                 SLACK_BOT_TOKEN=secretref:slack-bot-token \
                 SLACK_APP_TOKEN=secretref:slack-app-token \
                 BRAVE_API_KEY=secretref:brave-api-key \
+                GOOGLE_OAUTH_CLIENT_ID=secretref:google-oauth-client-id \
+                GOOGLE_OAUTH_CLIENT_SECRET=secretref:google-oauth-client-secret \
+                GOOGLE_OAUTH_REFRESH_TOKEN=secretref:google-oauth-refresh-token \
               >/dev/null
           else
             echo "Creating container app: $APP_NAME"
@@ -179,6 +185,9 @@ jobs:
                 slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
                 slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
                 brave-api-key='${{ secrets.BRAVE_API_KEY }}' \
+                google-oauth-client-id='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}' \
+                google-oauth-client-secret='${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}' \
+                google-oauth-refresh-token='${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}' \
               --env-vars \
                 AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
                 AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
@@ -202,6 +211,9 @@ jobs:
                 SLACK_BOT_TOKEN=secretref:slack-bot-token \
                 SLACK_APP_TOKEN=secretref:slack-app-token \
                 BRAVE_API_KEY=secretref:brave-api-key \
+                GOOGLE_OAUTH_CLIENT_ID=secretref:google-oauth-client-id \
+                GOOGLE_OAUTH_CLIENT_SECRET=secretref:google-oauth-client-secret \
+                GOOGLE_OAUTH_REFRESH_TOKEN=secretref:google-oauth-refresh-token \
               >/dev/null
           fi
 
