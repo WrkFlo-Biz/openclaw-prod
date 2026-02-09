@@ -1,11 +1,11 @@
 {
   "servers": {
     "google-workspace": {
-      "command": "workspace-mcp",
-      "args": ["--single-user", "--tools", "gmail"],
+      "command": "npx",
+      "args": ["-y", "gmail-mcp-imap"],
       "env": {
-        "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
-        "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}"
+        "GMAIL_EMAIL": "mo2dark@gmail.com",
+        "GMAIL_APP_PASSWORD": "${GMAIL_APP_PASSWORD}"
       }
     }
   }

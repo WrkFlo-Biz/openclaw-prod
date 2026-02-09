@@ -62,44 +62,15 @@ seed_agent_workspace() {
 seed_agent_workspace "mo2darkbot"
 seed_agent_workspace "mo2drkbot"
 
-# Configure mcporter with Google Workspace MCP server (OAuth)
-if [ -n "${GOOGLE_OAUTH_REFRESH_TOKEN:-}" ]; then
+# Configure mcporter with gmail-mcp-imap (app password, no OAuth needed)
+if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
   mkdir -p "$HOME/.mcporter"
-  sed -e "s|\${GOOGLE_OAUTH_CLIENT_ID}|${GOOGLE_OAUTH_CLIENT_ID}|g" \
-      -e "s|\${GOOGLE_OAUTH_CLIENT_SECRET}|${GOOGLE_OAUTH_CLIENT_SECRET}|g" \
+  sed -e "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" \
       /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
   chmod 600 "$HOME/.mcporter/config.json" 2>/dev/null || true
-
-  # Write OAuth credential file for workspace-mcp
-  mkdir -p "$HOME/.google_workspace_mcp/credentials"
-  jq -n \
-    --arg token "" \
-    --arg refresh "${GOOGLE_OAUTH_REFRESH_TOKEN}" \
-    --arg client_id "${GOOGLE_OAUTH_CLIENT_ID}" \
-    --arg client_secret "${GOOGLE_OAUTH_CLIENT_SECRET}" \
-  '{
-    "token": $token,
-    "refresh_token": $refresh,
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "client_id": $client_id,
-    "client_secret": $client_secret,
-    "scopes": [
-      "https://www.googleapis.com/auth/gmail.labels",
-      "https://www.googleapis.com/auth/gmail.settings.basic",
-      "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/gmail.compose",
-      "https://www.googleapis.com/auth/gmail.modify",
-      "https://www.googleapis.com/auth/gmail.send",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile",
-      "openid"
-    ],
-    "expiry": "2000-01-01T00:00:00"
-  }' > "$HOME/.google_workspace_mcp/credentials/mo2dark@gmail.com.json"
-  chmod 600 "$HOME/.google_workspace_mcp/credentials/mo2dark@gmail.com.json" 2>/dev/null || true
-  echo "mcporter Google Workspace configured for mo2dark@gmail.com (OAuth)"
+  echo "mcporter gmail-mcp-imap configured for mo2dark@gmail.com (app password)"
 else
-  echo "GOOGLE_OAUTH_REFRESH_TOKEN not set — skipping Google Workspace config"
+  echo "GMAIL_APP_PASSWORD not set — skipping mcporter gmail config"
 fi
 
 # Configure himalaya email client
