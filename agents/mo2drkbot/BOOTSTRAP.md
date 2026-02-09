@@ -1,5 +1,5 @@
 # BOOTSTRAP.md
-## OpenClaw CMO - Bootstrap Configuration
+## Momo CMO - Bootstrap Configuration
 
 ### Initialization Sequence
 

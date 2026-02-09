@@ -1,5 +1,5 @@
 # BOOTSTRAP.md
-## OpenClaw Chief of Staff - Bootstrap Configuration
+## Mo - Chief of Staff Bootstrap Configuration
 
 ### Initialization Sequence
 
