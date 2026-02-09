@@ -63,11 +63,15 @@ seed_agent_workspace "mo2darkbot"
 seed_agent_workspace "mo2drkbot"
 
 # Configure mcporter with gmail-mcp-imap (app password, no OAuth needed)
+# Write to all locations mcporter/openclaw might look for config
 if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
-  mkdir -p "$HOME/.mcporter"
+  mkdir -p "$HOME/.mcporter" "$CONFIG_DIR/config"
   sed -e "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" \
       /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
-  chmod 600 "$HOME/.mcporter/config.json" 2>/dev/null || true
+  cp "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json"
+  cp "$HOME/.mcporter/config.json" "$CONFIG_DIR/config/mcporter.json"
+  chmod 600 "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json" \
+            "$CONFIG_DIR/config/mcporter.json" 2>/dev/null || true
   echo "mcporter gmail-mcp-imap configured for mo2dark@gmail.com (app password)"
 else
   echo "GMAIL_APP_PASSWORD not set — skipping mcporter gmail config"
