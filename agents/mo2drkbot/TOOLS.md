@@ -1,6 +1,50 @@
 # TOOLS.md
 ## Tool Integration Framework
 
+## OpenClaw Production (Cloud) Tool Routing
+
+These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in production.
+
+### Hard Rules (Avoid Dead Ends)
+
+- Do not run `gog` in production. It uses a keyring and will fail non-interactively (`no TTY available`, `GOG_KEYRING_PASSWORD` prompts).
+- Do not call Calendar/Docs tools on `google-workspace.*` (that server is Gmail IMAP only). Use `google-workspace-api.*`.
+
+### Canonical Commands (Copy/Paste)
+
+```bash
+# Always use the persisted prod config file:
+MCPO=/data/openclaw/.openclaw/config/mcporter.json
+
+# Discover servers + tools (never guess tool names):
+mcporter list --config "$MCPO"
+
+# Call a tool:
+mcporter call --config "$MCPO" <server>.<tool> --args '<json>' --output json
+```
+
+### Which Server To Use
+
+- Email (IMAP, app password, stable): `google-workspace.*`
+  - Example tools: `get_primary_emails`, `get_updates_emails`, `get_email_content`, `send_email`
+- Google Workspace APIs (Calendar/Drive/Docs): `google-workspace-api.*`
+  - Example tools: `create_event` (Calendar), plus Drive/Docs tools exposed by `workspace-mcp`
+
+### Examples
+
+```bash
+MCPO=/data/openclaw/.openclaw/config/mcporter.json
+
+# Email: get latest messages
+mcporter call --config "$MCPO" google-workspace.get_primary_emails \
+  --args '{"limit":25}' --output json
+
+# Calendar: create an event (tool name may vary; verify via `mcporter list`)
+mcporter call --config "$MCPO" google-workspace-api.create_event \
+  --args '{"calendar":"primary","summary":"Test","start":"2026-02-10T19:00:00Z","end":"2026-02-10T19:30:00Z"}' \
+  --output json
+```
+
 ### CATEGORY 1: WRITING & EDITING
 
 - **Document creation** (Google Docs, Notion, Obsidian integration)

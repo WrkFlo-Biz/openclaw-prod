@@ -136,7 +136,7 @@ az containerapp revision restart -g openclaw-rg -n openclaw-gateway --revision $
 
 **Alternatives already installed in container**:
 - `himalaya` — CLI email client, config at `$HOME/.config/himalaya/config.toml`
-- `gog` (gogcli) — Google API CLI, could use service account
+- `gog` (gogcli) — **local-only bootstrap** for OAuth consent. **Do not use in prod bots** (keyring + no TTY issues).
 
 ## TASK 3: Enable Google Workspace Calendar/Docs/Drive (workspace-mcp)
 
@@ -151,6 +151,7 @@ az containerapp revision restart -g openclaw-rg -n openclaw-gateway --revision $
 1. **Repo**: `mcporter-config.json` now includes:
    - `google-workspace` (gmail-mcp-imap, app password)
    - `google-workspace-api` (workspace-mcp: gmail+calendar+drive+docs)
+   - Agent docs updated: `agents/*/TOOLS.md` now contains a hard routing table + canonical `mcporter` command templates so bots stop guessing (and stop trying `gog`).
 2. **Prod persistent state** (Azure Files `openclaw-state` share):
    - Updated `/data/openclaw/.openclaw/config/mcporter.json` to include `google-workspace-api`.
    - Patched `/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh` so future restarts re-generate:
