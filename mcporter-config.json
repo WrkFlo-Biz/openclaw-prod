@@ -7,6 +7,22 @@
         "GMAIL_EMAIL": "mo2dark@gmail.com",
         "GMAIL_APP_PASSWORD": "${GMAIL_APP_PASSWORD}"
       }
+    },
+    "google-workspace-api": {
+      "command": "workspace-mcp",
+      "args": [
+        "--single-user",
+        "--tools",
+        "gmail",
+        "calendar",
+        "drive",
+        "docs",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "WORKSPACE_MCP_CREDENTIALS_DIR": "/data/openclaw/.openclaw/credentials/workspace-mcp"
+      }
     }
   }
 }
