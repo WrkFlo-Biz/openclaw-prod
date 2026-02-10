@@ -1,4 +1,4 @@
-# OpenClaw Production — Handoff Log (2026-02-09)
+# OpenClaw Production — Handoff Log (2026-02-10)
 
 ## Repository & Infrastructure
 
@@ -9,7 +9,12 @@
 - **Container user**: `openclaw` (HOME=/data/openclaw), NOT root
 - **Persistent storage**: Azure Files mounted at `/data/openclaw/.openclaw`
 - **Deploy**: Push to `main` → GitHub Actions → Docker build → Azure (~15 min)
-- **Latest commit**: `677fe60` (fix: force reset memory index for Gemini embeddings)
+- **Latest commit**: `47dc7a1` (feat: allow mo2darkbot to use mo2drkbot as subagent)
+
+**Current prod state (2026-02-10)**:
+- **Revision**: `openclaw-gateway--0000045`
+- **Image**: `wrkfloopenclawacr.azurecr.io/openclaw:47dc7a13116828db9d470840cc62924687fb6f62`
+- **Startup command override**: `/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh` (Azure Files)
 
 **IMPORTANT (2026-02-09)**: Production currently overrides the image entrypoint.
 - Container app startup command: `/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh` (on the Azure Files mount)
@@ -37,7 +42,8 @@
 | `/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh` | **Prod startup script** (generates `openclaw.json`, seeds workspaces, starts gateway) |
 | `.github/workflows/deploy.yml` | Builds Docker, deploys to Azure, mounts Azure Files |
 | `Dockerfile` | Installs openclaw + tools, creates non-root user |
-| `mcporter-config.json` | gmail-mcp-imap template (placeholder `${GMAIL_APP_PASSWORD}`) |
+| `mcporter-config.json` | MCP server template: `gmail-mcp-imap` + `workspace-mcp` (Calendar/Docs/Drive) |
+| `/data/openclaw/.openclaw/config/mcporter.json` | **Prod runtime MCP config** (persisted; used by cron prompts) |
 | `himalaya-config.toml` | himalaya email client template |
 | `agents/mo2darkbot/*.md` | Mo (CoS) workspace seed |
 | `agents/mo2drkbot/*.md` | Momo (CMO) workspace seed |
@@ -132,7 +138,51 @@ az containerapp revision restart -g openclaw-rg -n openclaw-gateway --revision $
 - `himalaya` — CLI email client, config at `$HOME/.config/himalaya/config.toml`
 - `gog` (gogcli) — Google API CLI, could use service account
 
-## TASK 3: Verify Agent Identities
+## TASK 3: Enable Google Workspace Calendar/Docs/Drive (workspace-mcp)
+
+**Status**: **ENABLED (2026-02-10)** — `create_event` / Docs tools were missing because prod only had the email-only adapter (`gmail-mcp-imap`).
+
+**Root cause**:
+- `mcporter` server `google-workspace` was configured as `npx -y gmail-mcp-imap` which exposes Gmail-only tools.
+- Calendar + Docs require a Google API adapter (we use `workspace-mcp`).
+- Prod also had a persistent `/data/openclaw/.openclaw/config/mcporter.json` on Azure Files that was not being updated by the new image template until the entrypoint was patched.
+
+**Fix applied**:
+1. **Repo**: `mcporter-config.json` now includes:
+   - `google-workspace` (gmail-mcp-imap, app password)
+   - `google-workspace-api` (workspace-mcp: gmail+calendar+drive+docs)
+2. **Prod persistent state** (Azure Files `openclaw-state` share):
+   - Updated `/data/openclaw/.openclaw/config/mcporter.json` to include `google-workspace-api`.
+   - Patched `/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh` so future restarts re-generate:
+     - `$HOME/.mcporter/config.json`
+     - `$HOME/.mcporter/mcporter.json`
+     - `/data/openclaw/.openclaw/config/mcporter.json` (persisted)
+     using `/opt/mcporter-config.json` from the image.
+   - Ensures `/data/openclaw/.openclaw/credentials/workspace-mcp` directory exists.
+3. **Azure Container App secrets**:
+   - Updated `google-oauth-client-id`, `google-oauth-client-secret`, `google-oauth-refresh-token`
+   - The refresh token now includes Calendar/Drive/Docs scopes (obtained via local `gog` OAuth consent).
+   - Restarted revision to apply secrets.
+
+**How to use**:
+- Keep email calls on `google-workspace.*`
+- Use Calendar/Docs/Drive calls on `google-workspace-api.*`
+  - Example: `google-workspace-api.create_event` (NOT `google-workspace.create_event`)
+
+**Verify**:
+```bash
+# Fast check (no container exec): confirm mcporter.json on Azure Files includes both servers
+KEY=$(az storage account keys list -g openclaw-rg -n openclaw96c9db66 --query "[0].value" -o tsv)
+az storage file download --account-name openclaw96c9db66 --account-key "$KEY" \
+  --share-name openclaw-state --path config/mcporter.json --dest /tmp/mcporter.json --no-progress
+jq -r '.mcpServers|keys[]' /tmp/mcporter.json | sort
+
+# If exec is not rate-limited:
+az containerapp exec -g openclaw-rg -n openclaw-gateway --tty --command \
+  "mcporter list --config /data/openclaw/.openclaw/config/mcporter.json"
+```
+
+## TASK 4: Verify Agent Identities
 
 **Status**: Likely fixed, needs confirmation
 
@@ -175,5 +225,23 @@ az containerapp secret list -g openclaw-rg -n openclaw-gateway -o table
 | Telegram 409 conflicts | deploy.yml auto-deactivates old revisions |
 | chmod EPERM on Azure Files | OpenClaw dist patched with `.catch(()=>{})` |
 | `az containerapp exec` no TTY | Use self-ops or GitHub Actions instead |
-| Config lost on restart | All changes must go through docker-entrypoint.sh |
+| Config lost on restart | Prod uses Azure Files entrypoint override: `/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh` |
 | LLM FailoverError | Restart clears stuck sessions |
+
+## RECENT HANDOFF — 2026-02-10
+
+### What changed
+- Added `mo2drkbot` to `mo2darkbot`’s `subagents.allowAgents` list so the CMO can be spawned.
+- The only touched config is the prod entrypoint override (`/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh`) plus the repo `docker-entrypoint.sh`; Azure Containers generate the same merged JSON (see `/data/openclaw/.openclaw/openclaw.json` post-start).
+- Restarted revision `openclaw-gateway--0000044` so the gateway picked up the new allowlist entry and confirmed `/api/health` returns `200`.
+- Noted the gateway token mismatch log noise in `az containerapp logs` while the UI reconnected; no config error was written.
+
+### Verify for next CLI
+- Run `az containerapp show -g openclaw-rg -n openclaw-gateway --query properties.latestRevisionName -o tsv` to confirm you are on `openclaw-gateway--0000044` (or whatever latest started after you read this).
+- Fetch `openclaw` config via `az containerapp exec -g openclaw-rg -n openclaw-gateway --command "jq '.agents.list[] | select(.id==\"mo2darkbot\")' /data/openclaw/.openclaw/openclaw.json"` and ensure the `subagents.allowAgents` array lists `mo2drkbot`.
+- Use the gateway once your session key is ready: spawn `mo2drkbot` from `mo2darkbot` (or use `openclaw agents list` from Mo) to confirm the allowlist works; the gateway should reply `status: ok` instead of `forbidden`.
+- Health endpoint proof: `curl https://openclaw-gateway.wonderfulstone-86956ff4.eastus.azurecontainerapps.io/api/health` should keep returning `200` after restart.
+
+### Next steps
+- If you plan to change agent routing again, update both the version-controlled `docker-entrypoint.sh` (so future builds are aligned) and the runtime override, then restart the container app revision.
+- Keep an eye on Azure logs for `Invalid config` errors; wrong JSON patches come from gateways if you send `config.patch` without a fresh `baseHash`.
