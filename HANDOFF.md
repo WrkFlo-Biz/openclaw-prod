@@ -94,7 +94,7 @@ az containerapp logs show -g openclaw-rg -n openclaw-gateway --tail 100 2>&1 | g
 
 ## TASK 2: Fix Gmail/IMAP Authentication
 
-**Status**: **FIXED (2026-02-09 20:44 UTC)** — issue was the wrong Gmail account.
+**Status**: **FIXED (2026-02-09 20:44 UTC)** — issue was the wrong Gmail account. **FOLLOW-UP FIX (2026-02-10 00:09 UTC)** — Evening/Night cron jobs were using the wrong mcporter tool + missing `--config`.
 
 **Setup**: Switched from workspace-mcp (OAuth, kept expiring) to gmail-mcp-imap (App Password). Config written to 3 locations at runtime:
 - `$HOME/.mcporter/config.json`
@@ -109,6 +109,17 @@ az containerapp logs show -g openclaw-rg -n openclaw-gateway --tail 100 2>&1 | g
 2. **Fix**: Patched the prod entrypoint override (`/data/openclaw/.openclaw/config/docker-entrypoint.custom.sh`) to generate mcporter + himalaya configs for `mo2darkbot@gmail.com` instead of `mo2dark@gmail.com`, then restarted revision.
 
 **Prod now logs a warning on startup if the app password is not length 16.**
+
+**Cron follow-up (why the bot still said “email not working”)**:
+- **Symptom**: Evening/Night Email Briefing cron runs returned `Unknown MCP server 'google-workspace'` and referenced a non-existent tool `google-workspace.gmail_list_emails` (and did not pass `--config`).
+- **Root cause**: The Evening/Night cron *messages* were outdated and differed from the working Morning/Midday messages.
+- **Fix (prod state on Azure Files)**: Updated `/data/openclaw/.openclaw/cron/jobs.json` for:
+  - Evening job `d9c2ed60-6825-4c52-9012-ac585d97f0c2`
+  - Night job `8534c662-1fe0-4e01-a881-cc109edc85c3`
+  - Replaced the `gmail_list_emails` command with the working IMAP tools + explicit config:
+    - `mcporter call --config /data/openclaw/.openclaw/config/mcporter.json google-workspace.get_primary_emails --args '{"limit":50}' --output json`
+    - `mcporter call --config /data/openclaw/.openclaw/config/mcporter.json google-workspace.get_updates_emails --args '{"limit":50}' --output json`
+- **Verified**: Evening job produced a real categorized summary (no MCP server errors) on `2026-02-10 00:08 UTC` (see `/data/openclaw/.openclaw/cron/runs/d9c2ed60-6825-4c52-9012-ac585d97f0c2.jsonl`).
 
 **To update password**:
 ```bash
