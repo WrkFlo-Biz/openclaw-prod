@@ -15,6 +15,7 @@ These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in p
 ```bash
 # Always use the persisted prod config file:
 MCPO=/data/openclaw/.openclaw/config/mcporter.json
+GUSER=mo2darkbot@gmail.com
 
 # Discover servers + tools (never guess tool names):
 mcporter list --config "$MCPO"
@@ -34,15 +35,18 @@ mcporter call --config "$MCPO" <server>.<tool> --args '<json>' --output json
 
 ```bash
 MCPO=/data/openclaw/.openclaw/config/mcporter.json
+GUSER=mo2darkbot@gmail.com
 
 # Email: get latest messages
 mcporter call --config "$MCPO" google-workspace.get_primary_emails \
   --args '{"limit":25}' --output json
 
-# Calendar: create an event (tool name may vary; verify via `mcporter list`)
-mcporter call --config "$MCPO" google-workspace-api.create_event \
-  --args '{"calendar":"primary","summary":"Test","start":"2026-02-10T19:00:00Z","end":"2026-02-10T19:30:00Z"}' \
-  --output json
+# Calendar: list calendars (many workspace-mcp tools require user_google_email)
+mcporter call --config "$MCPO" google-workspace-api.list_calendars \
+  --args "{\"user_google_email\":\"${GUSER}\"}" --output json
+
+# Calendar/Docs/Drive: always run `mcporter list --config "$MCPO" google-workspace-api --schema` first
+# so you pass the required args for the specific tool.
 ```
 
 ### CATEGORY 1: COMMUNICATION
