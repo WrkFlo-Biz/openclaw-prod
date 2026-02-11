@@ -45,13 +45,14 @@ else
   touch "$CONFIG_DIR/.sessions-cleared-v3"
 fi
 
-# One-time: nuke OpenAI-based memory index so it rebuilds with Gemini embeddings.
-if [ -f "$CONFIG_DIR/.memory-index-reset-gemini" ]; then
-  echo "Memory index already reset for Gemini embeddings."
+# One-time: nuke memory index so it rebuilds with Azure OpenAI embeddings.
+if [ -f "$CONFIG_DIR/.memory-index-reset-aoai-embed3" ]; then
+  echo "Memory index already reset for Azure OpenAI embeddings."
 else
-  echo "Resetting memory index to force Gemini embeddings rebuild..."
-  rm -rf "$CONFIG_DIR/memory-index/"*.db "$CONFIG_DIR/memory-index/"*.db-* 2>/dev/null || true
-  touch "$CONFIG_DIR/.memory-index-reset-gemini"
+  echo "Resetting memory index to force Azure OpenAI embeddings rebuild..."
+  rm -rf "$CONFIG_DIR/memory-index/"*.db "$CONFIG_DIR/memory-index/"*.db-* \
+         "$CONFIG_DIR/memory-index/"*.sqlite "$CONFIG_DIR/memory-index/"*.sqlite-* 2>/dev/null || true
+  touch "$CONFIG_DIR/.memory-index-reset-aoai-embed3"
 fi
 
 
@@ -292,6 +293,7 @@ jq -n \
   --arg aoai_ep "${AZURE_OPENAI_ENDPOINT}" \
   --arg aoai_ver "${AZURE_OPENAI_API_VERSION:-2024-05-01-preview}" \
   --arg aoai_dep "${AZURE_OPENAI_DEPLOYMENT:-gpt-5-mini}" \
+  --arg aoai_embed_dep "${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-3-small}" \
   --arg acl_key "${AZURE_CLAUDE_API_KEY}" \
   --arg acl_ep "${AZURE_CLAUDE_ENDPOINT}" \
   --arg gh_tok "${GH_TOKEN}" \
@@ -367,12 +369,22 @@ jq -n \
         "fallbacks": ["azure-openai/gpt-5.2", "azure-openai/gpt-4o", "azure-claude/claude-opus-4-6"]
       },
       "workspace": ($config_dir + "/workspace"),
-      "maxConcurrent": 4,
+      "maxConcurrent": 2,
       "subagents": {"maxConcurrent": 8},
       "memorySearch": {
         "enabled": true,
-        "provider": "gemini",
-        "model": "gemini-embedding-001",
+        "provider": "openai",
+        "model": $aoai_embed_dep,
+        "remote": {
+          "baseUrl": ($aoai_ep + "openai/v1"),
+          "apiKey": $aoai_key,
+          "headers": {
+            "api-key": $aoai_key
+          },
+          "batch": {
+            "enabled": false
+          }
+        },
         "fallback": "none",
         "sources": ["memory"],
         "store": {
@@ -380,7 +392,7 @@ jq -n \
           "vector": {"enabled": true}
         },
         "sync": {
-          "onSessionStart": true,
+          "onSessionStart": false,
           "onSearch": true,
           "watch": false
         }
@@ -388,7 +400,7 @@ jq -n \
     },
     "list": [
       {"id": "mo2darkbot", "name": "@mo2darkbot", "workspace": ($config_dir + "/workspace-mo2darkbot"), "subagents": {"allowAgents": ["mo2drkbot"]}, "tools": {"profile": "full", "allow": ["llm-task"]}},
-      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "tools": {"profile": "full", "allow": ["llm-task"]}}
+      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "subagents": {"allowAgents": ["mo2darkbot"]}, "tools": {"profile": "full", "allow": ["llm-task"]}}
     ]
   },
   "session": {"dmScope": "per-account-channel-peer"},
@@ -465,8 +477,8 @@ else
 fi
 echo "Configured agent primary model: azure-openai/gpt-5-mini"
 echo "Configured agent fallbacks: azure-openai/gpt-5.2, azure-openai/gpt-4o, azure-claude/claude-opus-4-6"
-echo "Configured memorySearch provider: gemini (model: gemini-embedding-001)"
-echo "GEMINI_API_KEY present: $([ -n "${GEMINI_API_KEY:-}" ] && echo 'yes' || echo 'NO — embeddings will fail!')"
+echo "Configured memorySearch provider: openai via Azure OpenAI (model: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-3-small})"
+echo "AZURE_OPENAI_API_KEY present: $([ -n "${AZURE_OPENAI_API_KEY:-}" ] && echo 'yes' || echo 'NO — embeddings will fail!')"
 echo "Gateway bind mode: ${GATEWAY_BIND} (port ${GATEWAY_PORT})"
 if [ -n "${GH_TOKEN:-}" ]; then
   echo "GitHub token configured for skill runtime"
