@@ -18,15 +18,12 @@ Last Updated: 2026-02-11
 ## Ready
 | ID | Task | Owner | Project | Priority | Due | Notes |
 |---|---|---|---|---|---|---|
-| OPS-101 | Enforce Azure-first provider routing and remove Gemini fallback paths | mo2darkbot | Model Reliability | P0 | 2026-02-12 | Prevent billing/provider drift |
-| OPS-102 | Add canary test: `create_event` + `create_doc` on deploy/restart | mo2darkbot | Workspace Reliability | P0 | 2026-02-12 | Fail fast if Calendar/Docs break |
 | OPS-103 | Add agent-to-agent handoff protocol using shared board card IDs | mo2drkbot | Agent Collaboration | P1 | 2026-02-12 | Standardize delegation + status updates |
 
 ## In Progress
 | ID | Task | Owner | Project | Priority | Due | Notes |
 |---|---|---|---|---|---|---|
 | OPS-104 | Harden persistent memory operations to reduce SQLite lock contention | mo2darkbot | Memory Stability | P0 | 2026-02-13 | WAL + checkpoint + busy timeout review |
-| OPS-105 | Maintain trusted proxy list with observed ACA upstream IPs | mo2darkbot | Gateway Stability | P1 | 2026-02-12 | Keep warning-free gateway logs |
 
 ## Blocked
 | ID | Task | Owner | Project | Priority | Due | Notes |
@@ -41,5 +38,9 @@ Last Updated: 2026-02-11
 ## Done
 | ID | Task | Owner | Project | Priority | Completed | Notes |
 |---|---|---|---|---|---|---|
-| OPS-100 | Restore full-scope Google OAuth token so Calendar/Docs tools work | mo2darkbot | Workspace Reliability | P0 | 2026-02-11 | `list_calendars` and `create_doc` succeeded on revision `0000051` |
+| OPS-100 | Restore full-scope Google OAuth token so Calendar/Docs tools work | mo2darkbot | Workspace Reliability | P0 | 2026-02-11 | `list_calendars`, `create_event`, and `modify_doc_text` succeeded after restart on revision `0000054` |
+| OPS-101 | Enforce Azure-first provider routing and remove Gemini fallback paths | mo2darkbot | Model Reliability | P0 | 2026-02-11 | Live `openclaw.json` confirms memory provider `openai` with Azure endpoint |
+| OPS-102 | Add canary test: `create_event` + `create_doc` on deploy/restart | mo2darkbot | Workspace Reliability | P0 | 2026-02-11 | Canary operations run successfully in active container replica |
+| OPS-105 | Maintain trusted proxy list with observed ACA upstream IPs | mo2darkbot | Gateway Stability | P1 | 2026-02-11 | Trusted proxies include ACA upstreams; warning cleared |
 | OPS-108 | Configure exact trusted proxy IPs to clear gateway proxy warning | mo2darkbot | Gateway Stability | P1 | 2026-02-11 | Applied in entrypoint + no warning for `100.100.0.60` |
+| OPS-112 | Publish browser management dashboard for Kanban + second brain | mo2darkbot | Agent Ops | P1 | 2026-02-11 | Live at `/__openclaw__/canvas/management.html` |

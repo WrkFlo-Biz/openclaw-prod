@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wrk.Flo Bot Ops Dashboard</title>
+  <style>
+    :root {
+      --bg: #f6f3eb;
+      --ink: #1e1f22;
+      --muted: #5d646d;
+      --card: #ffffff;
+      --line: #d8d2c7;
+      --accent: #0f766e;
+      --accent-2: #cc5803;
+      --done: #1f9d55;
+      --blocked: #b42318;
+      --ready: #1d4ed8;
+      --review: #7c3aed;
+      --shadow: 0 8px 22px rgba(24, 30, 37, 0.09);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 14px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", "Helvetica", sans-serif;
+      background:
+        radial-gradient(circle at 15% 5%, #fce8d5 0%, transparent 35%),
+        radial-gradient(circle at 85% 0%, #d7f0ec 0%, transparent 33%),
+        var(--bg);
+    }
+
+    .shell {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 22px;
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font: 700 30px/1.05 "Georgia", "Times New Roman", serif;
+      letter-spacing: 0.2px;
+    }
+
+    .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    button, a.btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      text-decoration: none;
+      padding: 8px 12px;
+      font: 600 12px/1 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .status {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      padding: 6px 10px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .board-wrap {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.72);
+      box-shadow: var(--shadow);
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(260px, 1fr));
+      gap: 10px;
+      min-width: 1250px;
+    }
+
+    .col {
+      background: #fdfcf8;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+      min-height: 230px;
+    }
+
+    .col h2 {
+      margin: 0;
+      font: 700 14px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .count {
+      color: #fff;
+      background: #6d7280;
+      border-radius: 999px;
+      min-width: 22px;
+      text-align: center;
+      padding: 3px 7px;
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    .col.inbox .count { background: #4b5563; }
+    .col.ready .count { background: var(--ready); }
+    .col.progress .count { background: var(--accent-2); }
+    .col.blocked .count { background: var(--blocked); }
+    .col.review .count { background: var(--review); }
+    .col.done .count { background: var(--done); }
+
+    .cards {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-left: 5px solid #a8a29e;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+    }
+
+    .card.p0 { border-left-color: #b42318; }
+    .card.p1 { border-left-color: #b54708; }
+    .card.p2 { border-left-color: #0f766e; }
+
+    .id {
+      font: 700 11px/1 "Menlo", "Consolas", monospace;
+      color: #475467;
+      margin-bottom: 4px;
+    }
+
+    .task {
+      font: 600 12px/1.35 "Avenir Next", "Segoe UI", sans-serif;
+      margin-bottom: 6px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 6px;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      color: #445;
+      background: #fafafa;
+    }
+
+    .notes {
+      color: #586272;
+      font-size: 11px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.9);
+      box-shadow: var(--shadow);
+      padding: 12px;
+      position: sticky;
+      top: 10px;
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+    }
+
+    .panel h3 {
+      margin: 0 0 8px;
+      font: 700 16px/1.2 "Georgia", "Times New Roman", serif;
+    }
+
+    .panel p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+
+    .mini {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+
+    .mini h4 {
+      margin: 0 0 6px;
+      font: 700 12px/1.2 "Avenir Next", "Segoe UI", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #344054;
+    }
+
+    .mini ul {
+      margin: 0;
+      padding-left: 16px;
+      color: #475467;
+      font-size: 12px;
+    }
+
+    .error {
+      margin-top: 6px;
+      color: #b42318;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      .panel { position: static; max-height: none; }
+      .top { grid-template-columns: 1fr; }
+      .actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <div>
+        <h1>Wrk.Flo Bot Ops Dashboard</h1>
+        <div class="sub">Live Kanban for bot projects plus second-brain snapshot.</div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="refreshBtn" type="button">Refresh Data</button>
+        <a class="btn" href="/" target="_blank" rel="noreferrer">Open Gateway UI</a>
+        <a class="btn" href="./index.html" target="_blank" rel="noreferrer">Canvas Home</a>
+      </div>
+    </div>
+
+    <div class="status">
+      <div class="pill" id="stamp">Last loaded: --</div>
+      <div class="pill">Source: <code>canvas/KANBAN.md</code></div>
+      <div class="pill">Source: <code>canvas/SECOND_BRAIN.md</code></div>
+      <div class="pill" id="health">Status: loading...</div>
+    </div>
+
+    <div class="layout">
+      <div class="board-wrap">
+        <div class="board" id="board"></div>
+        <div class="error" id="error"></div>
+      </div>
+
+      <aside class="panel">
+        <h3>Second Brain Snapshot</h3>
+        <p id="brainUpdated">Last Updated: --</p>
+
+        <section class="mini">
+          <h4>Active Projects</h4>
+          <ul id="projects"></ul>
+        </section>
+
+        <section class="mini">
+          <h4>Decision Log</h4>
+          <ul id="decisions"></ul>
+        </section>
+
+        <section class="mini">
+          <h4>Agent Handoff Rules</h4>
+          <ul id="handoff"></ul>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const ORDER = [
+      { key: "Inbox", cls: "inbox" },
+      { key: "Ready", cls: "ready" },
+      { key: "In Progress", cls: "progress" },
+      { key: "Blocked", cls: "blocked" },
+      { key: "Review", cls: "review" },
+      { key: "Done", cls: "done" }
+    ];
+
+    function splitRow(line) {
+      return line.split("|").slice(1, -1).map((v) => v.trim());
+    }
+
+    function parseKanban(md) {
+      const lines = md.split(/\r?\n/);
+      const sections = {};
+      let i = 0;
+
+      while (i < lines.length) {
+        const sectionMatch = lines[i].match(/^##\s+(.+)$/);
+        if (!sectionMatch) { i += 1; continue; }
+
+        const section = sectionMatch[1].trim();
+        i += 1;
+
+        while (i < lines.length && !lines[i].startsWith("|")) {
+          if (lines[i].startsWith("## ")) break;
+          i += 1;
+        }
+
+        if (i + 1 >= lines.length || !lines[i].startsWith("|") || !lines[i + 1].includes("---")) {
+          continue;
+        }
+
+        const headers = splitRow(lines[i]);
+        i += 2;
+        const rows = [];
+
+        while (i < lines.length && lines[i].startsWith("|")) {
+          const cells = splitRow(lines[i]);
+          const row = {};
+          headers.forEach((h, idx) => {
+            row[h] = cells[idx] || "";
+          });
+          rows.push(row);
+          i += 1;
+        }
+
+        sections[section] = rows;
+      }
+
+      return sections;
+    }
+
+    function parseSimpleUpdated(md) {
+      const m = md.match(/Last Updated:\s*([^\n]+)/i);
+      return m ? m[1].trim() : "Unknown";
+    }
+
+    function parseBrainTable(md, heading) {
+      const lines = md.split(/\r?\n/);
+      const target = new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "i");
+      let i = lines.findIndex((line) => target.test(line.trim()));
+      if (i < 0) return [];
+
+      i += 1;
+      while (i < lines.length && !lines[i].startsWith("|")) {
+        if (lines[i].startsWith("## ")) return [];
+        i += 1;
+      }
+      if (i + 1 >= lines.length || !lines[i + 1].includes("---")) return [];
+
+      const headers = splitRow(lines[i]);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].startsWith("|")) {
+        const cells = splitRow(lines[i]);
+        const row = {};
+        headers.forEach((h, idx) => row[h] = cells[idx] || "");
+        rows.push(row);
+        i += 1;
+      }
+      return rows;
+    }
+
+    function parseHandoffRules(md) {
+      const lines = md.split(/\r?\n/);
+      const start = lines.findIndex((line) => /^##\s+6\)\s+Agent-to-Agent Handoff Standard/i.test(line));
+      if (start < 0) return [];
+
+      const out = [];
+      for (let i = start + 1; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (line.startsWith("## ")) break;
+        if (/^-\s+Rule\s+\d+:/i.test(line.trim())) {
+          out.push(line.replace(/^-\s+/, "").trim());
+        }
+      }
+      return out;
+    }
+
+    function makeCard(task) {
+      const p = (task.Priority || "").toLowerCase();
+      const cls = p.includes("p0") ? "p0" : p.includes("p1") ? "p1" : "p2";
+      const due = task.Due || task.Completed || "n/a";
+      const id = task.ID || "NO-ID";
+      const title = task.Task || "(missing task title)";
+      const owner = task.Owner || "unassigned";
+      const project = task.Project || "-";
+      const notes = task.Notes || "";
+
+      return `
+        <article class="card ${cls}">
+          <div class="id">${id}</div>
+          <div class="task">${title}</div>
+          <div class="meta">
+            <span class="tag">${owner}</span>
+            <span class="tag">${project}</span>
+            <span class="tag">${task.Priority || ""}</span>
+            <span class="tag">${due}</span>
+          </div>
+          <div class="notes">${notes}</div>
+        </article>
+      `;
+    }
+
+    function renderBoard(sections) {
+      const board = document.getElementById("board");
+      const html = ORDER.map((col) => {
+        const rows = sections[col.key] || [];
+        return `
+          <section class="col ${col.cls}">
+            <h2>${col.key}<span class="count">${rows.length}</span></h2>
+            <div class="cards">
+              ${rows.map(makeCard).join("") || "<div class='notes'>No cards.</div>"}
+            </div>
+          </section>
+        `;
+      }).join("");
+      board.innerHTML = html;
+    }
+
+    function renderBrain(brainMd) {
+      document.getElementById("brainUpdated").textContent = "Last Updated: " + parseSimpleUpdated(brainMd);
+
+      const projects = parseBrainTable(brainMd, "2) Active Projects (RICE View)")
+        .map((r) => `${r["Project ID"]}: ${r.Project} (Score ${r.Score}, ${r.Status})`);
+      document.getElementById("projects").innerHTML = (projects.length ? projects : ["No project data."])
+        .map((item) => `<li>${item}</li>`).join("");
+
+      const decisions = parseBrainTable(brainMd, "5) Decision Log")
+        .slice(0, 5)
+        .map((r) => `${r["Date (UTC)"]}: ${r.Decision}`);
+      document.getElementById("decisions").innerHTML = (decisions.length ? decisions : ["No decision log."])
+        .map((item) => `<li>${item}</li>`).join("");
+
+      const handoff = parseHandoffRules(brainMd);
+      document.getElementById("handoff").innerHTML = (handoff.length ? handoff : ["No handoff rules parsed."])
+        .map((item) => `<li>${item}</li>`).join("");
+    }
+
+    async function loadAll() {
+      const errorEl = document.getElementById("error");
+      const stamp = document.getElementById("stamp");
+      const health = document.getElementById("health");
+      errorEl.textContent = "";
+      health.textContent = "Status: loading...";
+
+      try {
+        const [kanbanRes, brainRes] = await Promise.all([
+          fetch("./KANBAN.md?ts=" + Date.now(), { cache: "no-store" }),
+          fetch("./SECOND_BRAIN.md?ts=" + Date.now(), { cache: "no-store" })
+        ]);
+
+        if (!kanbanRes.ok) throw new Error("Failed to load KANBAN.md (HTTP " + kanbanRes.status + ")");
+        if (!brainRes.ok) throw new Error("Failed to load SECOND_BRAIN.md (HTTP " + brainRes.status + ")");
+
+        const kanbanMd = await kanbanRes.text();
+        const brainMd = await brainRes.text();
+
+        const sections = parseKanban(kanbanMd);
+        renderBoard(sections);
+        renderBrain(brainMd);
+
+        stamp.textContent = "Last loaded: " + new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }) + " CT";
+        health.textContent = "Status: healthy";
+      } catch (err) {
+        errorEl.textContent = err.message;
+        health.textContent = "Status: load error";
+      }
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", loadAll);
+    loadAll();
+    setInterval(loadAll, 120000);
+  </script>
+</body>
+</html>

@@ -32,6 +32,7 @@ Primary Board: `/data/openclaw/.openclaw/shared/KANBAN.md`
 | Handoff log | `HANDOFF.md` | Operational timeline and incidents |
 | Ops commands | `scripts/ops.sh` | Azure and deploy control |
 | Self-ops commands | `scripts/self-ops.sh` | In-container recovery actions |
+| Management dashboard source | `canvas/management.html` | Browser Kanban/Second Brain UI served from canvas |
 | Workspace tools (Mo) | `agents/mo2darkbot/TOOLS.md` | Runtime tool routing and commands |
 | Workspace tools (Momo) | `agents/mo2drkbot/TOOLS.md` | Runtime tool routing and commands |
 
@@ -41,6 +42,8 @@ Primary Board: `/data/openclaw/.openclaw/shared/KANBAN.md`
 | 2026-02-11 | Use one shared Kanban + one shared Second Brain file | Keeps both bots aligned and removes duplicate state | both | 2026-03-01 |
 | 2026-02-11 | Seed shared files only if missing/empty | Preserve in-cloud edits across restarts | mo2darkbot | 2026-03-01 |
 | 2026-02-11 | Keep Google Workspace actions on `google-workspace-api` only | Prevent wrong-tool failures for Calendar/Docs/Drive | mo2darkbot | 2026-02-18 |
+| 2026-02-11 | Pin memory embeddings to Azure OpenAI and disable startup warm by default | Avoid Gemini drift and reduce startup 429 rate-limit spikes | mo2darkbot | 2026-02-25 |
+| 2026-02-11 | Publish management dashboard at `/__openclaw__/canvas/management.html` | Single browser control surface for Kanban + second brain status | mo2darkbot | 2026-03-01 |
 
 ## 6) Agent-to-Agent Handoff Standard
 - Rule 1: Every delegation must reference a card ID from Kanban.

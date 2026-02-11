@@ -132,6 +132,21 @@ Behavior:
   - `SHARED_KANBAN.md`
   - `SHARED_SECOND_BRAIN.md`
 
+## Management Dashboard (Kanban UI)
+
+The gateway now serves a browser-accessible management board at:
+
+- `https://<gateway-fqdn>/__openclaw__/canvas/management.html`
+
+Live dashboard data sources:
+
+- `https://<gateway-fqdn>/__openclaw__/canvas/KANBAN.md`
+- `https://<gateway-fqdn>/__openclaw__/canvas/SECOND_BRAIN.md`
+
+Source in repo:
+
+- `canvas/management.html`
+
 ## Daily Brief Cron Cadence
 
 On startup, the container enforces a 4x/day multi-brief cadence in `cron/jobs.json`
