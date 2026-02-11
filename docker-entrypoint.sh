@@ -71,8 +71,8 @@ seed_agent_workspace() {
 seed_agent_workspace "mo2darkbot"
 seed_agent_workspace "mo2drkbot"
 
-# Configure mcporter with gmail-mcp-imap (app password, no OAuth needed)
-# Write to all locations mcporter/openclaw might look for config
+# Configure mcporter with gmail-mcp-imap + workspace-mcp credentials.
+# Write to all locations mcporter/openclaw might look for config.
 if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
   # Normalize app passwords copied with spaces (Google shows them grouped).
   GMAIL_APP_PASSWORD="${GMAIL_APP_PASSWORD//[[:space:]]/}"
@@ -81,15 +81,107 @@ if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
   # Allow overriding the Gmail address; default to the bot mailbox.
   GMAIL_EMAIL="${GMAIL_EMAIL:-mo2darkbot@gmail.com}"
   export GMAIL_EMAIL
+  # OAuth refresh tokens are sometimes copied with whitespace/newlines.
+  GOOGLE_OAUTH_REFRESH_TOKEN="${GOOGLE_OAUTH_REFRESH_TOKEN//[[:space:]]/}"
+  export GOOGLE_OAUTH_REFRESH_TOKEN
+  WS_MCP_CREDENTIALS_DIR="$CONFIG_DIR/credentials/workspace-mcp"
+  export WS_MCP_CREDENTIALS_DIR
 
   if [ "${#GMAIL_APP_PASSWORD}" -ne 16 ]; then
     echo "WARNING: GMAIL_APP_PASSWORD length is ${#GMAIL_APP_PASSWORD} (expected 16 for Google App Password)."
   fi
 
-  mkdir -p "$HOME/.mcporter" "$CONFIG_DIR/config"
+  mkdir -p "$HOME/.mcporter" "$CONFIG_DIR/config" "$WS_MCP_CREDENTIALS_DIR"
+  chmod 700 "$WS_MCP_CREDENTIALS_DIR" 2>/dev/null || true
   sed -e "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" \
       -e "s|mo2dark@gmail.com|${GMAIL_EMAIL}|g" \
       /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
+
+  # Ensure workspace-mcp receives required auth env vars + correct credential dir key.
+  TMP_MCPO="$(mktemp)"
+  jq --arg ws_dir "$WS_MCP_CREDENTIALS_DIR" \
+     --arg guser "$GMAIL_EMAIL" \
+     --arg oauth_client_id "${GOOGLE_OAUTH_CLIENT_ID:-}" \
+     --arg oauth_client_secret "${GOOGLE_OAUTH_CLIENT_SECRET:-}" \
+     --arg oauth_refresh_token "${GOOGLE_OAUTH_REFRESH_TOKEN:-}" \
+     '.mcpServers["google-workspace-api"].env = (
+        (.mcpServers["google-workspace-api"].env // {})
+        + {
+            "GOOGLE_MCP_CREDENTIALS_DIR": $ws_dir,
+            "WORKSPACE_MCP_CREDENTIALS_DIR": $ws_dir,
+            "USER_GOOGLE_EMAIL": $guser
+          }
+        + (if $oauth_client_id != "" then {"GOOGLE_OAUTH_CLIENT_ID": $oauth_client_id} else {} end)
+        + (if $oauth_client_secret != "" then {"GOOGLE_OAUTH_CLIENT_SECRET": $oauth_client_secret} else {} end)
+        + (if $oauth_refresh_token != "" then {"GOOGLE_OAUTH_REFRESH_TOKEN": $oauth_refresh_token} else {} end)
+      )' "$HOME/.mcporter/config.json" > "$TMP_MCPO"
+  mv "$TMP_MCPO" "$HOME/.mcporter/config.json"
+
+  # Seed workspace-mcp credential cache for non-interactive Calendar/Docs/Drive calls.
+  if [ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ] && [ -n "${GOOGLE_OAUTH_CLIENT_SECRET:-}" ] && [ -n "${GOOGLE_OAUTH_REFRESH_TOKEN:-}" ]; then
+    WS_ACCESS_TOKEN=""
+    WS_TOKEN_EXPIRY=""
+    # Pre-fetch an access token so the credential file is immediately usable.
+    TOKEN_RESPONSE="$(curl -fsS https://oauth2.googleapis.com/token \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      --data-urlencode "client_id=${GOOGLE_OAUTH_CLIENT_ID}" \
+      --data-urlencode "client_secret=${GOOGLE_OAUTH_CLIENT_SECRET}" \
+      --data-urlencode "refresh_token=${GOOGLE_OAUTH_REFRESH_TOKEN}" \
+      --data-urlencode "grant_type=refresh_token" 2>/dev/null || true)"
+    if [ -n "$TOKEN_RESPONSE" ]; then
+      WS_ACCESS_TOKEN="$(printf '%s' "$TOKEN_RESPONSE" | jq -r '.access_token // ""')"
+      WS_EXPIRES_IN="$(printf '%s' "$TOKEN_RESPONSE" | jq -r '.expires_in // 0')"
+      if [ "$WS_EXPIRES_IN" -gt 0 ] 2>/dev/null; then
+        WS_TOKEN_EXPIRY="$(date -u -d "@$(( $(date +%s) + WS_EXPIRES_IN - 60 ))" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")"
+      fi
+    fi
+
+    jq -n \
+      --arg token_uri "https://oauth2.googleapis.com/token" \
+      --arg access_token "${WS_ACCESS_TOKEN}" \
+      --arg client_id "${GOOGLE_OAUTH_CLIENT_ID}" \
+      --arg client_secret "${GOOGLE_OAUTH_CLIENT_SECRET}" \
+      --arg refresh_token "${GOOGLE_OAUTH_REFRESH_TOKEN}" \
+      --arg expiry "${WS_TOKEN_EXPIRY}" \
+      --argjson scopes '[
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/documents.readonly",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/gmail.labels",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.settings.basic",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "openid",
+        "email",
+        "profile"
+      ]' \
+      '{
+        "token": $access_token,
+        "refresh_token": $refresh_token,
+        "token_uri": $token_uri,
+        "client_id": $client_id,
+        "client_secret": $client_secret,
+        "scopes": $scopes,
+        "expiry": $expiry
+      }' > "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}_credentials.json"
+    # Keep legacy filename too in case an older workspace-mcp build is deployed.
+    cp "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}_credentials.json" "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}.json"
+    chmod 600 "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}_credentials.json" \
+              "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}.json" 2>/dev/null || true
+    echo "workspace-mcp OAuth credential cache written for ${GMAIL_EMAIL}"
+  else
+    echo "workspace-mcp OAuth secrets missing; calendar/docs may require interactive auth"
+  fi
+
   cp "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json"
   cp "$HOME/.mcporter/config.json" "$CONFIG_DIR/config/mcporter.json"
   chmod 600 "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json" \

@@ -45,6 +45,18 @@ mcporter call --config "$MCPO" google-workspace.get_primary_emails \
 mcporter call --config "$MCPO" google-workspace-api.list_calendars \
   --args "{\"user_google_email\":\"${GUSER}\"}" --output json
 
+# Calendar: create an event (required args are summary/start_time/end_time)
+mcporter call --config "$MCPO" google-workspace-api.create_event \
+  --args "{\"user_google_email\":\"${GUSER}\",\"summary\":\"Ops Sync\",\"start_time\":\"2026-02-11T21:00:00Z\",\"end_time\":\"2026-02-11T21:30:00Z\"}" \
+  --output json
+
+# Docs: create and then edit a document
+mcporter call --config "$MCPO" google-workspace-api.create_doc \
+  --args "{\"user_google_email\":\"${GUSER}\",\"title\":\"Ops Notes\"}" --output json
+mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
+  --args "{\"user_google_email\":\"${GUSER}\",\"document_id\":\"<DOC_ID>\",\"start_index\":1,\"text\":\"Initial note.\"}" \
+  --output json
+
 # Calendar/Docs/Drive: always run `mcporter list --config "$MCPO" google-workspace-api --schema` first
 # so you pass the required args for the specific tool.
 ```

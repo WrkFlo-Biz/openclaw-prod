@@ -21,7 +21,9 @@
         "stdio"
       ],
       "env": {
-        "WORKSPACE_MCP_CREDENTIALS_DIR": "/data/openclaw/.openclaw/credentials/workspace-mcp"
+        "GOOGLE_MCP_CREDENTIALS_DIR": "/data/openclaw/.openclaw/credentials/workspace-mcp",
+        "WORKSPACE_MCP_CREDENTIALS_DIR": "/data/openclaw/.openclaw/credentials/workspace-mcp",
+        "USER_GOOGLE_EMAIL": "mo2dark@gmail.com"
       }
     }
   }
