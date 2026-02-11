@@ -468,7 +468,7 @@ jq -n \
       },
       "workspace": ($config_dir + "/workspace"),
       "maxConcurrent": 1,
-      "subagents": {"maxConcurrent": 8},
+      "subagents": {"maxConcurrent": 1},
       "memorySearch": {
         "enabled": true,
         "provider": "openai",
