@@ -17,8 +17,7 @@ umask 077
 mkdir -p \
   "$CONFIG_DIR/workspace" \
   "$CONFIG_DIR/workspace/memory" \
-  "$CONFIG_DIR/memory-index" \
-  "$CONFIG_DIR/memory-db" \
+  "$CONFIG_DIR/memory-index-cache" \
   "$CONFIG_DIR/logs" \
   "$CONFIG_DIR/shared" \
   "$CONFIG_DIR/agents" \
@@ -34,6 +33,56 @@ chmod 700 "$CONFIG_DIR" \
   "$CONFIG_DIR/credentials" \
   "$CONFIG_DIR/telegram" \
   "$CONFIG_DIR/slack" 2>/dev/null || true
+
+# Memory search uses SQLite; store active DBs on local disk to avoid Azure Files locks.
+MEMORY_DB_DIR="/tmp/openclaw-memory"
+mkdir -p "$MEMORY_DB_DIR"
+chmod 700 "$MEMORY_DB_DIR" 2>/dev/null || true
+
+# Persist snapshots of memory DBs on mounted storage for restart durability.
+MEMORY_CACHE_DIR="$CONFIG_DIR/memory-index-cache"
+mkdir -p "$MEMORY_CACHE_DIR"
+chmod 700 "$MEMORY_CACHE_DIR" 2>/dev/null || true
+
+restore_memory_index_cache() {
+  local agent_id="$1"
+  local restored=0
+
+  for suffix in "" "-wal" "-shm"; do
+    local src="$MEMORY_CACHE_DIR/${agent_id}.sqlite${suffix}"
+    local dest="$MEMORY_DB_DIR/${agent_id}.sqlite${suffix}"
+    if [ -s "$src" ] && [ ! -s "$dest" ]; then
+      cp "$src" "$dest" 2>/dev/null || true
+      restored=1
+    fi
+  done
+
+  if [ "$restored" -eq 1 ]; then
+    echo "Restored memory index cache for $agent_id"
+  fi
+}
+
+save_memory_index_cache() {
+  local agent_id="$1"
+  local saved=0
+
+  if [ ! -s "$MEMORY_DB_DIR/${agent_id}.sqlite" ]; then
+    return 0
+  fi
+
+  for suffix in "" "-wal" "-shm"; do
+    local src="$MEMORY_DB_DIR/${agent_id}.sqlite${suffix}"
+    local dest="$MEMORY_CACHE_DIR/${agent_id}.sqlite${suffix}"
+    if [ -e "$src" ]; then
+      cp "$src" "$dest" 2>/dev/null || true
+      saved=1
+    fi
+  done
+
+  if [ "$saved" -eq 1 ]; then
+    echo "Saved memory index cache for $agent_id"
+  fi
+}
 
 # One-time: clear stale sessions after model switch (Claude -> GPT-5-mini).
 # Old sessions reference response IDs from the previous model's Responses API
@@ -52,10 +101,14 @@ if [ -f "$CONFIG_DIR/.memory-index-reset-aoai-embed3" ]; then
   echo "Memory index already reset for Azure OpenAI embeddings."
 else
   echo "Resetting memory index to force Azure OpenAI embeddings rebuild..."
-  rm -rf "$CONFIG_DIR/memory-index/"*.db "$CONFIG_DIR/memory-index/"*.db-* \
-         "$CONFIG_DIR/memory-index/"*.sqlite "$CONFIG_DIR/memory-index/"*.sqlite-* 2>/dev/null || true
+  rm -f "$MEMORY_DB_DIR/"*.sqlite "$MEMORY_DB_DIR/"*.sqlite-* 2>/dev/null || true
+  rm -f "$MEMORY_CACHE_DIR/"*.sqlite "$MEMORY_CACHE_DIR/"*.sqlite-* 2>/dev/null || true
   touch "$CONFIG_DIR/.memory-index-reset-aoai-embed3"
 fi
+
+# Restore cached index into /tmp so memory search is warm after restarts.
+restore_memory_index_cache "mo2darkbot"
+restore_memory_index_cache "mo2drkbot"
 
 
 # Seed shared planning files from git repo into persistent storage.
@@ -272,6 +325,9 @@ if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GH_TOKEN:-}" ]; then
   export GITHUB_TOKEN="${GH_TOKEN}"
 fi
 
+# Hard-disable Gemini in this deployment path; all model routing is Azure-backed.
+unset GEMINI_API_KEY
+
 # Validate at least one bot token is provided
 if [ -z "${BOT_TOKEN_DEFAULT}" ] && [ -z "${BOT_TOKEN_MO2DRKBOT}" ]; then
   echo "At least one Telegram bot token is required (TELEGRAM_BOT_TOKEN_DEFAULT or TELEGRAM_BOT_TOKEN_MO2DRKBOT)" >&2
@@ -344,7 +400,6 @@ jq -n \
   --arg github_tok "${GITHUB_TOKEN}" \
   --arg github_repo "${GITHUB_REPO:-Wrk-Flo/openclaw-prod}" \
   --arg openai_key "${OPENAI_API_KEY}" \
-  --arg gemini_key "${GEMINI_API_KEY}" \
   --arg gplaces_key "${GOOGLE_PLACES_API_KEY}" \
   --arg eleven_key "${ELEVENLABS_API_KEY}" \
   --arg gmail_pw "${GMAIL_APP_PASSWORD}" \
@@ -371,7 +426,6 @@ jq -n \
     "GITHUB_TOKEN": $github_tok,
     "GITHUB_REPO": $github_repo,
     "OPENAI_API_KEY": $openai_key,
-    "GEMINI_API_KEY": $gemini_key,
     "GOOGLE_PLACES_API_KEY": $gplaces_key,
     "ELEVENLABS_API_KEY": $eleven_key,
     "GMAIL_APP_PASSWORD": $gmail_pw,
@@ -432,7 +486,7 @@ jq -n \
         "fallback": "none",
         "sources": ["memory"],
         "store": {
-          "path": ($config_dir + "/memory-index"),
+          "path": "/tmp/openclaw-memory/{agentId}.sqlite",
           "vector": {"enabled": true}
         },
         "sync": {
@@ -467,6 +521,9 @@ jq -n \
     "trustedProxies": [
       "127.0.0.1",
       "::1",
+      "10.0.0.0/8",
+      "100.100.0.0/16",
+      "172.16.0.0/12",
       "100.100.0.60",
       "100.100.0.197",
       "100.100.194.25"
@@ -544,6 +601,20 @@ if [ -n "${GH_TOKEN:-}" ]; then
   echo "GitHub token configured for skill runtime"
 else
   echo "GitHub token not configured"
+fi
+
+# Persist memory DB snapshots periodically while gateway is running.
+# This keeps memory durable across container restarts without using Azure Files as live SQLite storage.
+MEMORY_CACHE_SYNC_SECS="${OPENCLAW_MEMORY_CACHE_SYNC_SECS:-120}"
+if [ "$MEMORY_CACHE_SYNC_SECS" -gt 0 ] 2>/dev/null; then
+  (
+    while true; do
+      sleep "$MEMORY_CACHE_SYNC_SECS"
+      save_memory_index_cache "mo2darkbot" 2>/dev/null || true
+      save_memory_index_cache "mo2drkbot" 2>/dev/null || true
+    done
+  ) &
+  echo "Memory cache sync enabled every ${MEMORY_CACHE_SYNC_SECS}s"
 fi
 
 # Start OpenClaw gateway

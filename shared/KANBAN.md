@@ -23,7 +23,7 @@ Last Updated: 2026-02-11
 ## In Progress
 | ID | Task | Owner | Project | Priority | Due | Notes |
 |---|---|---|---|---|---|---|
-| OPS-104 | Harden persistent memory operations to reduce SQLite lock contention | mo2darkbot | Memory Stability | P0 | 2026-02-13 | WAL + checkpoint + busy timeout review |
+| OPS-113 | Run end-to-end canary for meeting invite + doc edit after gateway restart | mo2darkbot | Workspace Reliability | P0 | 2026-02-12 | Validate from bot channel, not just shell |
 
 ## Blocked
 | ID | Task | Owner | Project | Priority | Due | Notes |
@@ -44,3 +44,4 @@ Last Updated: 2026-02-11
 | OPS-105 | Maintain trusted proxy list with observed ACA upstream IPs | mo2darkbot | Gateway Stability | P1 | 2026-02-11 | Trusted proxies include ACA upstreams; warning cleared |
 | OPS-108 | Configure exact trusted proxy IPs to clear gateway proxy warning | mo2darkbot | Gateway Stability | P1 | 2026-02-11 | Applied in entrypoint + no warning for `100.100.0.60` |
 | OPS-112 | Publish browser management dashboard for Kanban + second brain | mo2darkbot | Agent Ops | P1 | 2026-02-11 | Live at `/__openclaw__/canvas/management.html` |
+| OPS-104 | Harden persistent memory operations to reduce SQLite lock contention | mo2darkbot | Memory Stability | P0 | 2026-02-11 | Active DB moved to `/tmp/openclaw-memory/*.sqlite`; periodic snapshot to `/data/openclaw/.openclaw/memory-index-cache` enabled |
