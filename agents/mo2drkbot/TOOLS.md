@@ -16,6 +16,9 @@ These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in p
 # Always use the persisted prod config file:
 MCPO=/data/openclaw/.openclaw/config/mcporter.json
 GUSER=mo2darkbot@gmail.com
+SHARED_DIR=/data/openclaw/.openclaw/shared
+KANBAN="$SHARED_DIR/KANBAN.md"
+SECOND_BRAIN="$SHARED_DIR/SECOND_BRAIN.md"
 
 # Discover servers + tools (never guess tool names):
 mcporter list --config "$MCPO"
@@ -23,6 +26,17 @@ mcporter list --config "$MCPO"
 # Call a tool:
 mcporter call --config "$MCPO" <server>.<tool> --args '<json>' --output json
 ```
+
+### Shared Kanban + Second Brain (Agent-to-Agent)
+
+- Shared board path: `/data/openclaw/.openclaw/shared/KANBAN.md`
+- Shared second brain path: `/data/openclaw/.openclaw/shared/SECOND_BRAIN.md`
+- In each workspace these are linked as:
+  - `SHARED_KANBAN.md`
+  - `SHARED_SECOND_BRAIN.md`
+- Delegation rule:
+  - Every handoff must include a Kanban card ID (`OPS-###`).
+  - Receiver updates the same card status and adds evidence in `Notes`.
 
 ### Which Server To Use
 

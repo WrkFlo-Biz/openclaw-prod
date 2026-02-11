@@ -20,6 +20,7 @@ mkdir -p \
   "$CONFIG_DIR/memory-index" \
   "$CONFIG_DIR/memory-db" \
   "$CONFIG_DIR/logs" \
+  "$CONFIG_DIR/shared" \
   "$CONFIG_DIR/agents" \
   "$CONFIG_DIR/credentials" \
   "$CONFIG_DIR/telegram" \
@@ -28,6 +29,7 @@ mkdir -p \
 chmod 700 "$CONFIG_DIR" \
   "$CONFIG_DIR/workspace" \
   "$CONFIG_DIR/logs" \
+  "$CONFIG_DIR/shared" \
   "$CONFIG_DIR/agents" \
   "$CONFIG_DIR/credentials" \
   "$CONFIG_DIR/telegram" \
@@ -56,15 +58,57 @@ else
 fi
 
 
+# Seed shared planning files from git repo into persistent storage.
+# Preserve runtime edits so the board/brain remain durable across restarts.
+SHARED_SRC_DIR="/opt/openclaw-shared"
+SHARED_DIR="$CONFIG_DIR/shared"
+seed_shared_file() {
+  local filename="$1"
+  local src="$SHARED_SRC_DIR/$filename"
+  local dest="$SHARED_DIR/$filename"
+  if [ ! -f "$src" ]; then
+    return
+  fi
+  if [ -s "$dest" ]; then
+    echo "Preserved shared file $filename"
+    return
+  fi
+  cp "$src" "$dest"
+  chmod 600 "$dest" 2>/dev/null || true
+  echo "Seeded shared file $filename"
+}
+
+seed_shared_file "KANBAN.md"
+seed_shared_file "SECOND_BRAIN.md"
+
 # Seed agent workspace files from git repo into persistent storage.
-# Always overwrite so workspaces stay in sync with the repo.
+# Only write missing/empty files so runtime edits persist.
 AGENT_SRC_DIR="/opt/openclaw-agents"
 seed_agent_workspace() {
   local agent_id="$1"
   local ws_dir="$CONFIG_DIR/workspace-${agent_id}"
+  local src
+  local name
+  local dest
   mkdir -p "$ws_dir"
   if [ -d "$AGENT_SRC_DIR/$agent_id" ]; then
-    cp "$AGENT_SRC_DIR/$agent_id/"*.md "$ws_dir/" 2>/dev/null || true
+    for src in "$AGENT_SRC_DIR/$agent_id/"*.md; do
+      [ -e "$src" ] || continue
+      name="$(basename "$src")"
+      dest="$ws_dir/$name"
+      if [ -s "$dest" ]; then
+        continue
+      fi
+      cp "$src" "$dest"
+      chmod 600 "$dest" 2>/dev/null || true
+    done
+    # Link shared planning system into each workspace for agent-to-agent coordination.
+    if [ -f "$SHARED_DIR/KANBAN.md" ]; then
+      ln -sfn "$SHARED_DIR/KANBAN.md" "$ws_dir/SHARED_KANBAN.md"
+    fi
+    if [ -f "$SHARED_DIR/SECOND_BRAIN.md" ]; then
+      ln -sfn "$SHARED_DIR/SECOND_BRAIN.md" "$ws_dir/SHARED_SECOND_BRAIN.md"
+    fi
     echo "Seeded workspace for $agent_id"
   fi
 }

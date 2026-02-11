@@ -117,6 +117,21 @@ View logs in Azure Portal:
 1. Go to Container Apps > openclaw-gateway
 2. Click "Logs" for real-time logs
 
+## Shared Ops System (Kanban + Second Brain)
+
+The container now seeds a shared planning system for both bots at:
+
+- `/data/openclaw/.openclaw/shared/KANBAN.md`
+- `/data/openclaw/.openclaw/shared/SECOND_BRAIN.md`
+
+Behavior:
+
+- Files are seeded from repo templates in `shared/` only if missing/empty.
+- Runtime edits persist across restarts.
+- Each bot workspace gets symlinks:
+  - `SHARED_KANBAN.md`
+  - `SHARED_SECOND_BRAIN.md`
+
 ## Redeploy (< 2 minutes)
 
 ```bash

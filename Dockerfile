@@ -102,6 +102,7 @@ RUN mkdir -p /data/openclaw/.openclaw/workspace \
 
 # Copy agent workspace seed files
 COPY agents/ /opt/openclaw-agents/
+COPY shared/ /opt/openclaw-shared/
 
 # Copy mcporter and himalaya config templates (credentials injected at runtime)
 COPY mcporter-config.json /opt/mcporter-config.json
