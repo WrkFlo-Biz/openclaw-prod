@@ -203,6 +203,12 @@ jq \
     "BRIEF 3 - Afternoon Prep & Follow-ups",
     "BRIEF 4 - EOD Closeout"
   ];
+  def legacy_names: [
+    "Morning Email Briefing (7am CST)",
+    "Midday Email Briefing (12pm CST)",
+    "Evening Email Briefing (5pm CST)",
+    "Night Email Briefing (10pm CST)"
+  ];
   def existing_by_id($root; $id):
     (first(($root.jobs // [])[]? | select(.id == $id)) // {});
   def mkjob($root; $id; $name; $expr; $message):
@@ -245,6 +251,8 @@ jq \
             (.id as $job_id | (brief_ids | index($job_id)) == null)
             and
             ((.name // "") as $job_name | (brief_names | index($job_name)) == null)
+            and
+            ((.name // "") as $legacy_name | (legacy_names | index($legacy_name)) == null)
           )
         )
       + [
