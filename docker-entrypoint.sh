@@ -157,10 +157,10 @@ seed_agent_workspace() {
     done
     # Link shared planning system into each workspace for agent-to-agent coordination.
     if [ -f "$SHARED_DIR/KANBAN.md" ]; then
-      ln -sfn "$SHARED_DIR/KANBAN.md" "$ws_dir/SHARED_KANBAN.md"
+      ln -sfn "$SHARED_DIR/KANBAN.md" "$ws_dir/SHARED_KANBAN.md" 2>/dev/null || true
     fi
     if [ -f "$SHARED_DIR/SECOND_BRAIN.md" ]; then
-      ln -sfn "$SHARED_DIR/SECOND_BRAIN.md" "$ws_dir/SHARED_SECOND_BRAIN.md"
+      ln -sfn "$SHARED_DIR/SECOND_BRAIN.md" "$ws_dir/SHARED_SECOND_BRAIN.md" 2>/dev/null || true
     fi
     echo "Seeded workspace for $agent_id"
   fi
