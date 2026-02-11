@@ -467,7 +467,7 @@ jq -n \
         "fallbacks": ["azure-openai/gpt-5.2", "azure-openai/gpt-4o", "azure-claude/claude-opus-4-6"]
       },
       "workspace": ($config_dir + "/workspace"),
-      "maxConcurrent": 2,
+      "maxConcurrent": 1,
       "subagents": {"maxConcurrent": 8},
       "memorySearch": {
         "enabled": true,
@@ -491,7 +491,7 @@ jq -n \
         },
         "sync": {
           "onSessionStart": false,
-          "onSearch": true,
+          "onSearch": false,
           "watch": false
         }
       }
