@@ -515,6 +515,16 @@ jq -n \
 chmod 600 "$CONFIG_FILE" 2>/dev/null || true
 chmod 600 "$CONFIG_DIR/agents/main/sessions/sessions.json" 2>/dev/null || true
 
+# Enforce the multi-brief cron cadence + output template in persistent state.
+if [ "${OPENCLAW_ENFORCE_MULTI_BRIEF_CRON:-true}" = "true" ]; then
+  BRIEF_AGENT_ID="${OPENCLAW_BRIEF_AGENT_ID:-mo2darkbot}"
+  if /usr/local/bin/configure-brief-cron "$CONFIG_DIR" "$BRIEF_AGENT_ID"; then
+    echo "Daily brief cron cadence configured for agent: ${BRIEF_AGENT_ID}"
+  else
+    echo "WARNING: Failed to configure daily brief cron cadence"
+  fi
+fi
+
 echo "OpenClaw config generated at $CONFIG_FILE"
 ACCOUNT_COUNT=0
 if [ -n "${BOT_TOKEN_DEFAULT}" ]; then ACCOUNT_COUNT=$((ACCOUNT_COUNT + 1)); fi

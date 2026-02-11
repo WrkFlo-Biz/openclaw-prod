@@ -111,8 +111,9 @@ COPY himalaya-config.toml /opt/himalaya-config.toml
 # Copy ops scripts and entrypoint
 COPY scripts/self-ops.sh /usr/local/bin/self-ops
 COPY scripts/ops.sh /usr/local/bin/openclaw-ops
+COPY scripts/configure-brief-cron.sh /usr/local/bin/configure-brief-cron
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/self-ops /usr/local/bin/openclaw-ops
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/self-ops /usr/local/bin/openclaw-ops /usr/local/bin/configure-brief-cron
 
 # Set environment variables
 ENV HOME=/data/openclaw
