@@ -420,7 +420,13 @@ jq -n \
     "port": $gw_port,
     "mode": "local",
     "bind": $gw_bind,
-    "trustedProxies": ["10.0.0.0/8", "100.100.0.0/16", "172.16.0.0/12"],
+    "trustedProxies": [
+      "127.0.0.1",
+      "::1",
+      "100.100.0.60",
+      "100.100.0.197",
+      "100.100.194.25"
+    ],
     "auth": {"mode": "token", "token": $gw_token}
   },
   "browser": {
