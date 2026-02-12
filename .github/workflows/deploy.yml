@@ -262,17 +262,27 @@ jobs:
           APP_NAME="${{ env.CONTAINER_APP_NAME }}"
           RG="${{ env.RESOURCE_GROUP }}"
 
-          echo "Waiting for HTTPS health endpoint..."
-          FQDN="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
+          echo "Waiting for latest revision to become ready and healthy..."
           for i in {1..60}; do
-            if curl -fsS "https://${FQDN}/api/health" >/dev/null; then
-              echo "Healthy: https://${FQDN}"
+            LATEST_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestRevisionName -o tsv)"
+            READY_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestReadyRevisionName -o tsv)"
+            RUN_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.runningState -o tsv 2>/dev/null || true)"
+            HEALTH_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.healthState -o tsv 2>/dev/null || true)"
+            PROVISIONING_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.provisioningState -o tsv 2>/dev/null || true)"
+            echo "Attempt ${i}/60: latest=${LATEST_REV} ready=${READY_REV} running=${RUN_STATE} health=${HEALTH_STATE} provisioning=${PROVISIONING_STATE}"
+
+            if [ "$LATEST_REV" = "$READY_REV" ] && [ "$RUN_STATE" = "Running" ] && [ "$HEALTH_STATE" = "Healthy" ]; then
+              echo "Healthy revision: ${LATEST_REV}"
               exit 0
             fi
-            echo "Not ready yet (${i}/60): https://${FQDN}/api/health"
             sleep 5
           done
 
-          echo "Timed out waiting for Container App health check." >&2
+          echo "Timed out waiting for revision health." >&2
+          az containerapp show -g "$RG" -n "$APP_NAME" --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,runningStatus:properties.runningStatus}' -o json || true
+          LATEST_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestRevisionName -o tsv 2>/dev/null || true)"
+          if [ -n "$LATEST_REV" ]; then
+            az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" -o json || true
+          fi
           az containerapp logs show -g "$RG" -n "$APP_NAME" --tail 200 || true
           exit 1
