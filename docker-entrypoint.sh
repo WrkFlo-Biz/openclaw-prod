@@ -1,11 +1,24 @@
 #!/bin/bash
 set -e
 
-CONFIG_DIR="/data/openclaw/.openclaw"
+PERSIST_DIR="/data/openclaw/.openclaw"
+CONFIG_DIR="/tmp/openclaw-state"
 CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 
-# IMPORTANT: OpenClaw reads config/state from OPENCLAW_STATE_DIR by default (~/.openclaw).
-# In Azure Container Apps we want all state on the Azure Files mount.
+# Run active state on local disk to avoid Azure Files SQLite lock contention.
+# Persist snapshots to Azure Files so state is restored across container restarts.
+restore_runtime_state() {
+  mkdir -p "$PERSIST_DIR" "$CONFIG_DIR"
+  cp -a "$PERSIST_DIR/." "$CONFIG_DIR/" 2>/dev/null || true
+}
+
+persist_runtime_state() {
+  mkdir -p "$PERSIST_DIR"
+  cp -a "$CONFIG_DIR/." "$PERSIST_DIR/" 2>/dev/null || true
+}
+
+restore_runtime_state
+
 export OPENCLAW_STATE_DIR="$CONFIG_DIR"
 export OPENCLAW_CONFIG_PATH="$CONFIG_FILE"
 
@@ -40,7 +53,7 @@ mkdir -p "$MEMORY_DB_DIR"
 chmod 700 "$MEMORY_DB_DIR" 2>/dev/null || true
 
 # Persist snapshots of memory DBs on mounted storage for restart durability.
-MEMORY_CACHE_DIR="$CONFIG_DIR/memory-index-cache"
+MEMORY_CACHE_DIR="$PERSIST_DIR/memory-index-cache"
 mkdir -p "$MEMORY_CACHE_DIR"
 chmod 700 "$MEMORY_CACHE_DIR" 2>/dev/null || true
 
@@ -155,12 +168,15 @@ seed_agent_workspace() {
       cp "$src" "$dest"
       chmod 600 "$dest" 2>/dev/null || true
     done
-    # Link shared planning system into each workspace for agent-to-agent coordination.
+    # Copy shared planning system into each workspace for agent-to-agent coordination.
+    # Avoid symlinks because Azure Files mounts do not reliably support them.
     if [ -f "$SHARED_DIR/KANBAN.md" ]; then
-      ln -sfn "$SHARED_DIR/KANBAN.md" "$ws_dir/SHARED_KANBAN.md" 2>/dev/null || true
+      cp "$SHARED_DIR/KANBAN.md" "$ws_dir/SHARED_KANBAN.md" 2>/dev/null || true
+      chmod 600 "$ws_dir/SHARED_KANBAN.md" 2>/dev/null || true
     fi
     if [ -f "$SHARED_DIR/SECOND_BRAIN.md" ]; then
-      ln -sfn "$SHARED_DIR/SECOND_BRAIN.md" "$ws_dir/SHARED_SECOND_BRAIN.md" 2>/dev/null || true
+      cp "$SHARED_DIR/SECOND_BRAIN.md" "$ws_dir/SHARED_SECOND_BRAIN.md" 2>/dev/null || true
+      chmod 600 "$ws_dir/SHARED_SECOND_BRAIN.md" 2>/dev/null || true
     fi
     echo "Seeded workspace for $agent_id"
   fi
@@ -616,6 +632,21 @@ if [ "$MEMORY_CACHE_SYNC_SECS" -gt 0 ] 2>/dev/null; then
   ) &
   echo "Memory cache sync enabled every ${MEMORY_CACHE_SYNC_SECS}s"
 fi
+
+# Persist full runtime state back to Azure Files on an interval so it survives restarts.
+STATE_SYNC_SECS="${OPENCLAW_STATE_SYNC_SECS:-60}"
+if [ "$STATE_SYNC_SECS" -gt 0 ] 2>/dev/null; then
+  (
+    while true; do
+      sleep "$STATE_SYNC_SECS"
+      persist_runtime_state 2>/dev/null || true
+    done
+  ) &
+  echo "Runtime state sync enabled every ${STATE_SYNC_SECS}s"
+fi
+
+# Persist initial config/state before launching the gateway.
+persist_runtime_state 2>/dev/null || true
 
 # Start OpenClaw gateway
 exec openclaw gateway run --bind "${GATEWAY_BIND}" --port "${GATEWAY_PORT}"
