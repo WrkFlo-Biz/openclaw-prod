@@ -59,19 +59,17 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skipBuild != 'true' }}
         run: |
           set -euo pipefail
-          IMAGE_BASE="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}"
           for attempt in 1 2; do
-            echo "Build attempt ${attempt}/2"
-            if docker buildx build \
-              --progress=plain \
-              --platform linux/amd64 \
-              -t "${IMAGE_BASE}:${{ github.sha }}" \
-              -t "${IMAGE_BASE}:latest" \
-              --push .; then
+            echo "ACR build attempt ${attempt}/2"
+            if az acr build \
+              --registry "${{ env.AZURE_CONTAINER_REGISTRY }}" \
+              --image "${{ env.CONTAINER_IMAGE }}:${{ github.sha }}" \
+              --image "${{ env.CONTAINER_IMAGE }}:latest" \
+              .; then
               break
             fi
             if [ "$attempt" -eq 2 ]; then
-              echo "Docker build/push failed after retries" >&2
+              echo "ACR build failed after retries" >&2
               exit 1
             fi
             sleep 20
