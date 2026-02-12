@@ -141,7 +141,7 @@ jobs:
                 OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
                 OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
                 GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-                OPENCLAW_MEMORY_DB_PATH='/data/openclaw/.openclaw/memory-db' \
+                OPENCLAW_MEMORY_DB_PATH='/tmp/openclaw-memory-db' \
                 AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
                 AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
                 TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
@@ -199,7 +199,7 @@ jobs:
                 OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
                 OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
                 GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-                OPENCLAW_MEMORY_DB_PATH='/data/openclaw/.openclaw/memory-db' \
+                OPENCLAW_MEMORY_DB_PATH='/tmp/openclaw-memory-db' \
                 AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
                 AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
                 TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
