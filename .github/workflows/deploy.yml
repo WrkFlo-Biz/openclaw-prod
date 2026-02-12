@@ -275,9 +275,13 @@ jobs:
             PROVISIONING_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.provisioningState -o tsv 2>/dev/null || true)"
             echo "Attempt ${i}/60: latest=${LATEST_REV} ready=${READY_REV} running=${RUN_STATE} health=${HEALTH_STATE} provisioning=${PROVISIONING_STATE}"
 
-            if [ "$LATEST_REV" = "$READY_REV" ] && [ "$RUN_STATE" = "Running" ] && [ "$HEALTH_STATE" = "Healthy" ]; then
-              echo "Healthy revision: ${LATEST_REV}"
-              exit 0
+            if [ "$LATEST_REV" = "$READY_REV" ] && [ "$HEALTH_STATE" = "Healthy" ] && [ "$PROVISIONING_STATE" = "Provisioned" ]; then
+              case "$RUN_STATE" in
+                Running|RunningAtMaxScale)
+                  echo "Healthy revision: ${LATEST_REV}"
+                  exit 0
+                  ;;
+              esac
             fi
             sleep 5
           done
