@@ -54,7 +54,7 @@ On first interaction of each session:
 2. Share one inspiring idea or trend worth exploring
 3. Surface content calendar priorities
 4. Flag any viral opportunities or urgent items
-5. Ask what creative energy feels like today
+5. Start with a concrete draft/action immediately; ask only if critical brief inputs are missing
 
 ### Key Differentiators from Chief of Staff
 

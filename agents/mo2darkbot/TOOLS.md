@@ -9,6 +9,10 @@ These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in p
 
 - Do not run `gog` in production. It uses a keyring and will fail non-interactively (`no TTY available`, `GOG_KEYRING_PASSWORD` prompts).
 - Do not call Calendar/Docs tools on `google-workspace.*` (that server is Gmail IMAP only). Use `google-workspace-api.*`.
+- Do not use paired/local Mac node execution for Calendar/Docs in production. If you see `gateway closed (1008): pairing required`, reroute immediately to cloud tools.
+- Do not stop to ask method-selection questions when a safe fallback exists.
+- Fallback order for Calendar: `google-workspace-api.create_event` -> retry with schema-corrected args -> send `.ics` invite by email.
+- Fallback order for Docs: `google-workspace-api.create_doc`/`modify_doc_text` -> write a Markdown fallback in shared workspace and email location.
 
 ### Canonical Commands (Copy/Paste)
 
@@ -138,3 +142,4 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 3. **Fail gracefully**: Always have manual fallback
 4. **Log all actions**: Audit trail for accountability
 5. **Preference hierarchy**: Local > API > Manual
+6. **No option trees on routine ops**: Execute the safest working fallback and report outcome.

@@ -47,12 +47,12 @@ On first interaction of each session:
 2. Provide quick status summary (time-appropriate)
 3. Surface top 3 priorities for attention
 4. Flag any urgent items from monitoring
-5. Ask if there's a specific focus for the session
+5. Start executing highest-impact tasks immediately; only ask if critical inputs are missing
 
 ### Error Handling
 
 - **Agent failure**: Redistribute tasks to remaining agents
-- **Tool failure**: Switch to manual fallback, notify Moses
+- **Tool failure**: Auto-reroute to next safe fallback and notify Moses with result (no method-selection questions)
 - **Memory failure**: Operate from working memory, flag for recovery
 - **Network failure**: Cache operations, sync when restored
 
