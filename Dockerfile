@@ -83,40 +83,53 @@ RUN set -eu; \
 # SQLite locks can happen under concurrent memory searches + indexing.
 # Set WAL + busy_timeout to reduce transient SQLITE_BUSY errors.
 RUN set -eu; \
-	    OPENCLAW_DIR="$(npm root -g)/openclaw"; \
-	    FILE="$OPENCLAW_DIR/dist/memory/manager.js"; \
-	    if [ -f "$FILE" ]; then \
-	      python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
-if "PRAGMA busy_timeout" in s and "journal_mode = WAL" in s: print("openclaw sqlite pragmas: already patched"); sys.exit(0); \
-needle="const { DatabaseSync } = requireNodeSqlite();\n        return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });"; \
-if needle not in s: print("openclaw sqlite pragmas: pattern not found (skipping)", file=sys.stderr); sys.exit(0); \
-replacement=( \
-  "const { DatabaseSync } = requireNodeSqlite();\n" \
-  "        const db = new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });\n" \
-  "        try {\n" \
-  "            db.exec(\"PRAGMA journal_mode = WAL\");\n" \
-  "        }\n" \
-  "        catch {\n" \
-  "        }\n" \
-  "        try {\n" \
-  "            db.exec(\"PRAGMA synchronous = NORMAL\");\n" \
-  "        }\n" \
-  "        catch {\n" \
-  "        }\n" \
-  "        try {\n" \
-  "            db.exec(\"PRAGMA busy_timeout = 5000\");\n" \
-  "        }\n" \
-  "        catch {\n" \
-  "        }\n" \
-  "        try {\n" \
-  "            db.exec(\"PRAGMA foreign_keys = ON\");\n" \
-  "        }\n" \
-  "        catch {\n" \
-  "        }\n" \
-  "        return db;" \
-); \
-p.write_text(s.replace(needle, replacement)); print("openclaw sqlite pragmas: patched", p);' "$FILE"; \
-	    fi
+    OPENCLAW_DIR="$(npm root -g)/openclaw"; \
+    if [ -d "$OPENCLAW_DIR/dist" ]; then \
+      for f in $(rg -l 'return new DatabaseSync\(dbPath, \{ allowExtension: this\.settings\.store\.vector\.enabled \}\);' "$OPENCLAW_DIR/dist" || true); do \
+        python3 - "$f" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+src = path.read_text()
+needle = (
+    "const { DatabaseSync } = requireNodeSqlite();\n"
+    "        return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });"
+)
+replacement = (
+    "const { DatabaseSync } = requireNodeSqlite();\n"
+    "        const db = new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });\n"
+    "        try {\n"
+    '            db.exec("PRAGMA journal_mode = WAL");\n'
+    "        }\n"
+    "        catch {\n"
+    "        }\n"
+    "        try {\n"
+    '            db.exec("PRAGMA synchronous = NORMAL");\n'
+    "        }\n"
+    "        catch {\n"
+    "        }\n"
+    "        try {\n"
+    '            db.exec("PRAGMA busy_timeout = 5000");\n'
+    "        }\n"
+    "        catch {\n"
+    "        }\n"
+    "        try {\n"
+    '            db.exec("PRAGMA foreign_keys = ON");\n'
+    "        }\n"
+    "        catch {\n"
+    "        }\n"
+    "        return db;"
+)
+
+if "PRAGMA busy_timeout" not in src and needle in src:
+    path.write_text(src.replace(needle, replacement))
+    print(f"openclaw sqlite pragmas: patched {path}")
+else:
+    print(f"openclaw sqlite pragmas: skip {path}")
+PY
+      done; \
+    fi
 
 # Install Lobster workflow engine
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
