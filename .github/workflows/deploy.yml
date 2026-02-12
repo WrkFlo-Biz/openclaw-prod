@@ -58,8 +58,24 @@ jobs:
       - name: Build and push Docker image
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skipBuild != 'true' }}
         run: |
-          docker buildx build --platform linux/amd64 -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ github.sha }} --push .
-          docker buildx build --platform linux/amd64 -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:latest --push .
+          set -euo pipefail
+          IMAGE_BASE="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}"
+          for attempt in 1 2; do
+            echo "Build attempt ${attempt}/2"
+            if docker buildx build \
+              --progress=plain \
+              --platform linux/amd64 \
+              -t "${IMAGE_BASE}:${{ github.sha }}" \
+              -t "${IMAGE_BASE}:latest" \
+              --push .; then
+              break
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              echo "Docker build/push failed after retries" >&2
+              exit 1
+            fi
+            sleep 20
+          done
 
       - name: Deploy to Azure Container Apps (HTTPS + WebSockets)
         run: |
