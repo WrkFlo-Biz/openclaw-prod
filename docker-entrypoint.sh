@@ -356,6 +356,10 @@ if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
   chmod 600 "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json" \
             "$CONFIG_DIR/config/mcporter.json" 2>/dev/null || true
   echo "mcporter gmail-mcp-imap configured for ${GMAIL_EMAIL} (app password)"
+
+  # workspace-mcp should use the on-disk credential cache; avoid leaking OAuth secrets into
+  # runtime env where they might override cached credentials.
+  unset GOOGLE_OAUTH_REFRESH_TOKEN GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET
 else
   echo "GMAIL_APP_PASSWORD not set — skipping mcporter gmail config"
 fi
