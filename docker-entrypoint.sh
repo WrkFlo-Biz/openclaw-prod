@@ -256,13 +256,13 @@ if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
       -e "s|mo2dark@gmail.com|${GMAIL_EMAIL}|g" \
       /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
 
-  # Ensure workspace-mcp receives required auth env vars + correct credential dir key.
+  # Ensure workspace-mcp receives correct credential dir + user email.
+  # OAuth secrets are intentionally NOT injected into the MCP env because:
+  # - workspace-mcp can refresh from the on-disk credential cache
+  # - injecting stale secrets can override good cached credentials and break Calendar/Docs
   TMP_MCPO="$(mktemp)"
   jq --arg ws_dir "$WS_MCP_CREDENTIALS_DIR" \
      --arg guser "$GMAIL_EMAIL" \
-     --arg oauth_client_id "${GOOGLE_OAUTH_CLIENT_ID:-}" \
-     --arg oauth_client_secret "${GOOGLE_OAUTH_CLIENT_SECRET:-}" \
-     --arg oauth_refresh_token "${GOOGLE_OAUTH_REFRESH_TOKEN:-}" \
      '.mcpServers["google-workspace-api"].env = (
         (.mcpServers["google-workspace-api"].env // {})
         + {
@@ -270,14 +270,24 @@ if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
             "WORKSPACE_MCP_CREDENTIALS_DIR": $ws_dir,
             "USER_GOOGLE_EMAIL": $guser
           }
-        + (if $oauth_client_id != "" then {"GOOGLE_OAUTH_CLIENT_ID": $oauth_client_id} else {} end)
-        + (if $oauth_client_secret != "" then {"GOOGLE_OAUTH_CLIENT_SECRET": $oauth_client_secret} else {} end)
-        + (if $oauth_refresh_token != "" then {"GOOGLE_OAUTH_REFRESH_TOKEN": $oauth_refresh_token} else {} end)
       )' "$HOME/.mcporter/config.json" > "$TMP_MCPO"
   mv "$TMP_MCPO" "$HOME/.mcporter/config.json"
 
   # Seed workspace-mcp credential cache for non-interactive Calendar/Docs/Drive calls.
-  if [ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ] && [ -n "${GOOGLE_OAUTH_CLIENT_SECRET:-}" ] && [ -n "${GOOGLE_OAUTH_REFRESH_TOKEN:-}" ]; then
+  # Preserve an existing cache restored from mounted storage.
+  WS_EXISTING_CRED=""
+  for cand in \
+    "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}.json" \
+    "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}_credentials.json"; do
+    if [ -s "$cand" ]; then
+      WS_EXISTING_CRED="$cand"
+      break
+    fi
+  done
+
+  if [ -n "$WS_EXISTING_CRED" ]; then
+    echo "workspace-mcp OAuth credential cache present for ${GMAIL_EMAIL} (preserved)"
+  elif [ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ] && [ -n "${GOOGLE_OAUTH_CLIENT_SECRET:-}" ] && [ -n "${GOOGLE_OAUTH_REFRESH_TOKEN:-}" ]; then
     WS_ACCESS_TOKEN=""
     WS_TOKEN_EXPIRY=""
     # Pre-fetch an access token so the credential file is immediately usable.
@@ -338,7 +348,7 @@ if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
               "$WS_MCP_CREDENTIALS_DIR/${GMAIL_EMAIL}.json" 2>/dev/null || true
     echo "workspace-mcp OAuth credential cache written for ${GMAIL_EMAIL}"
   else
-    echo "workspace-mcp OAuth secrets missing; calendar/docs may require interactive auth"
+    echo "workspace-mcp OAuth secrets missing and no cached credential file found; calendar/docs may require interactive auth"
   fi
 
   cp "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json"
@@ -386,8 +396,9 @@ if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GH_TOKEN:-}" ]; then
   export GITHUB_TOKEN="${GH_TOKEN}"
 fi
 
-# Hard-disable Gemini in this deployment path; all model routing is Azure-backed.
+# Hard-disable non-Azure providers in this deployment path; all model routing is Azure-backed.
 unset GEMINI_API_KEY
+unset OPENAI_API_KEY
 
 # Validate at least one bot token is provided
 if [ -z "${BOT_TOKEN_DEFAULT}" ] && [ -z "${BOT_TOKEN_MO2DRKBOT}" ]; then
@@ -460,7 +471,6 @@ jq -n \
   --arg gh_tok "${GH_TOKEN}" \
   --arg github_tok "${GITHUB_TOKEN}" \
   --arg github_repo "${GITHUB_REPO:-Wrk-Flo/openclaw-prod}" \
-  --arg openai_key "${OPENAI_API_KEY}" \
   --arg gplaces_key "${GOOGLE_PLACES_API_KEY}" \
   --arg eleven_key "${ELEVENLABS_API_KEY}" \
   --arg gmail_pw "${GMAIL_APP_PASSWORD}" \
@@ -486,7 +496,6 @@ jq -n \
     "GH_TOKEN": $gh_tok,
     "GITHUB_TOKEN": $github_tok,
     "GITHUB_REPO": $github_repo,
-    "OPENAI_API_KEY": $openai_key,
     "GOOGLE_PLACES_API_KEY": $gplaces_key,
     "ELEVENLABS_API_KEY": $eleven_key,
     "GMAIL_APP_PASSWORD": $gmail_pw,
