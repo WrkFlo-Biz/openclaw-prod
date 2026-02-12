@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: openclaw-prod-deploy-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   AZURE_CONTAINER_REGISTRY: wrkfloopenclawacr
@@ -25,16 +25,12 @@ env:
   CONTAINER_APP_NAME: openclaw-gateway
   CONTAINER_IMAGE: openclaw
   # Persist OpenClaw state across revisions/redeploys (skills, telegram, workspace, logs, etc.)
-  # NOTE: The actual Azure Files backing store is configured on the Container Apps environment storage
-  # ("openclaw-state"). Deploy step resolves the account/share dynamically.
   ENV_STORAGE_NAME: openclaw-state
   MOUNT_PATH: /data/openclaw/.openclaw
   GATEWAY_PORT: "18789"
   GATEWAY_BIND: lan
   GITHUB_REPO: Wrk-Flo/openclaw-prod
-  # On push, deploy the existing "latest" image for speed/reliability and sync runtime files via Azure Files.
-  # On workflow_dispatch, allow building+deploying a specific image tag.
-  IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.imageTag || github.sha) || 'latest' }}
+  IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.imageTag || github.sha }}
 
 jobs:
   build-and-deploy:
@@ -51,7 +47,6 @@ jobs:
             {"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}
 
       - name: Login to ACR
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skipBuild != 'true' }}
         run: |
           az acr login \
             --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
@@ -59,7 +54,7 @@ jobs:
             --password ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Docker image
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skipBuild != 'true' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skipBuild != 'true' }}
         run: |
           set -euo pipefail
           for attempt in 1 2; do
@@ -89,75 +84,8 @@ jobs:
           REGISTRY_SERVER="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
           IMAGE="${REGISTRY_SERVER}/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }}"
 
-          # Resolve the Azure Files backing store configured on the managed environment storage.
           ENV_STORAGE_NAME="${{ env.ENV_STORAGE_NAME }}"
           MOUNT_PATH="${{ env.MOUNT_PATH }}"
-          STATE_ACCOUNT_NAME="$(az containerapp env storage show -g "$RG" -n "$ENV_NAME" --storage-name "$ENV_STORAGE_NAME" --query properties.azureFile.accountName -o tsv)"
-          STATE_SHARE_NAME="$(az containerapp env storage show -g "$RG" -n "$ENV_NAME" --storage-name "$ENV_STORAGE_NAME" --query properties.azureFile.shareName -o tsv)"
-          STATE_STORAGE_KEY="$(az storage account keys list -g "$RG" -n "$STATE_ACCOUNT_NAME" --query '[0].value' -o tsv)"
-          echo "::add-mask::${STATE_STORAGE_KEY}"
-
-          echo "State storage resolved: ${STATE_ACCOUNT_NAME}/${STATE_SHARE_NAME}"
-
-          # Ensure expected directories exist and sync runtime-managed files (entrypoint + docs) to Azure Files.
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name config >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name shared >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name canvas >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name cron >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name credentials >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name credentials/workspace-mcp >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name workspace-mo2darkbot >/dev/null 2>&1 || true
-          az storage directory create --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" --share-name "$STATE_SHARE_NAME" --name workspace-mo2drkbot >/dev/null 2>&1 || true
-
-          az storage file upload \
-            --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" \
-            --share-name "$STATE_SHARE_NAME" \
-            --source docker-entrypoint.sh \
-            --path config/docker-entrypoint.custom.sh \
-            --no-progress >/dev/null
-
-          az storage file upload \
-            --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" \
-            --share-name "$STATE_SHARE_NAME" \
-            --source shared/KANBAN.md \
-            --path shared/KANBAN.md \
-            --no-progress >/dev/null
-
-          az storage file upload \
-            --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" \
-            --share-name "$STATE_SHARE_NAME" \
-            --source shared/SECOND_BRAIN.md \
-            --path shared/SECOND_BRAIN.md \
-            --no-progress >/dev/null
-
-          az storage file upload \
-            --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" \
-            --share-name "$STATE_SHARE_NAME" \
-            --source canvas/management.html \
-            --path canvas/management.html \
-            --no-progress >/dev/null
-
-          for f in agents/mo2darkbot/*.md; do
-            [ -e "$f" ] || continue
-            base="$(basename "$f")"
-            az storage file upload \
-              --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" \
-              --share-name "$STATE_SHARE_NAME" \
-              --source "$f" \
-              --path "workspace-mo2darkbot/${base}" \
-              --no-progress >/dev/null
-          done
-
-          for f in agents/mo2drkbot/*.md; do
-            [ -e "$f" ] || continue
-            base="$(basename "$f")"
-            az storage file upload \
-              --account-name "$STATE_ACCOUNT_NAME" --account-key "$STATE_STORAGE_KEY" \
-              --share-name "$STATE_SHARE_NAME" \
-              --source "$f" \
-              --path "workspace-mo2drkbot/${base}" \
-              --no-progress >/dev/null
-          done
 
           # Prefer in-place update to avoid downtime and preserve mounted state.
           if az containerapp show -g "$RG" -n "$APP_NAME" >/dev/null 2>&1; then
@@ -192,7 +120,7 @@ jobs:
             az containerapp update \
               -g "$RG" -n "$APP_NAME" \
               --image "$IMAGE" \
-              --command "${MOUNT_PATH}/config/docker-entrypoint.custom.sh" \
+              --command /usr/local/bin/docker-entrypoint.sh \
               --replace-env-vars \
                 AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
                 AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
@@ -224,7 +152,7 @@ jobs:
               -g "$RG" -n "$APP_NAME" \
               --environment "$ENV_NAME" \
               --image "$IMAGE" \
-              --command "${MOUNT_PATH}/config/docker-entrypoint.custom.sh" \
+              --command /usr/local/bin/docker-entrypoint.sh \
               --ingress external \
               --target-port "${{ env.GATEWAY_PORT }}" \
               --transport auto \
