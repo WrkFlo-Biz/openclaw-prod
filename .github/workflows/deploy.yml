@@ -14,6 +14,10 @@ on:
         required: false
         default: "false"
 
+concurrency:
+  group: openclaw-prod-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AZURE_CONTAINER_REGISTRY: wrkfloopenclawacr
   RESOURCE_GROUP: openclaw-rg
