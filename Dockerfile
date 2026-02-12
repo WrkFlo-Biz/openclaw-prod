@@ -86,48 +86,10 @@ RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     if [ -d "$OPENCLAW_DIR/dist" ]; then \
       for f in $(rg -l 'return new DatabaseSync\(dbPath, \{ allowExtension: this\.settings\.store\.vector\.enabled \}\);' "$OPENCLAW_DIR/dist" || true); do \
-        python3 - "$f" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-src = path.read_text()
-needle = (
-    "const { DatabaseSync } = requireNodeSqlite();\n"
-    "        return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });"
-)
-replacement = (
-    "const { DatabaseSync } = requireNodeSqlite();\n"
-    "        const db = new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });\n"
-    "        try {\n"
-    '            db.exec("PRAGMA journal_mode = WAL");\n'
-    "        }\n"
-    "        catch {\n"
-    "        }\n"
-    "        try {\n"
-    '            db.exec("PRAGMA synchronous = NORMAL");\n'
-    "        }\n"
-    "        catch {\n"
-    "        }\n"
-    "        try {\n"
-    '            db.exec("PRAGMA busy_timeout = 5000");\n'
-    "        }\n"
-    "        catch {\n"
-    "        }\n"
-    "        try {\n"
-    '            db.exec("PRAGMA foreign_keys = ON");\n'
-    "        }\n"
-    "        catch {\n"
-    "        }\n"
-    "        return db;"
-)
-
-if "PRAGMA busy_timeout" not in src and needle in src:
-    path.write_text(src.replace(needle, replacement))
-    print(f"openclaw sqlite pragmas: patched {path}")
-else:
-    print(f"openclaw sqlite pragmas: skip {path}")
-PY
+        python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
+n="const { DatabaseSync } = requireNodeSqlite();\n        return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });"; \
+r="const { DatabaseSync } = requireNodeSqlite();\n        const db = new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });\n        try {\n            db.exec(\"PRAGMA journal_mode = WAL\");\n        }\n        catch {\n        }\n        try {\n            db.exec(\"PRAGMA synchronous = NORMAL\");\n        }\n        catch {\n        }\n        try {\n            db.exec(\"PRAGMA busy_timeout = 5000\");\n        }\n        catch {\n        }\n        try {\n            db.exec(\"PRAGMA foreign_keys = ON\");\n        }\n        catch {\n        }\n        return db;"; \
+p.write_text(s if ("PRAGMA busy_timeout" in s or n not in s) else s.replace(n, r)); print(f"openclaw sqlite pragmas: processed {p}")' "$f"; \
       done; \
     fi
 
