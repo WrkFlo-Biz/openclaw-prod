@@ -7,14 +7,57 @@ CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 
 # Run active state on local disk to avoid Azure Files SQLite lock contention.
 # Persist snapshots to Azure Files so state is restored across container restarts.
+STATE_DIRS=(
+  "agents"
+  "config"
+  "credentials"
+  "cron"
+  "memory"
+  "shared"
+  "slack"
+  "telegram"
+  "workspace"
+  "workspace-mo2darkbot"
+  "workspace-mo2drkbot"
+)
+STATE_FILES=(
+  ".sessions-cleared-v3"
+  ".memory-index-reset-aoai-embed3"
+  "openclaw.json"
+)
+
 restore_runtime_state() {
   mkdir -p "$PERSIST_DIR" "$CONFIG_DIR"
-  cp -a "$PERSIST_DIR/." "$CONFIG_DIR/" 2>/dev/null || true
+  local dir
+  local file
+  for dir in "${STATE_DIRS[@]}"; do
+    if [ -d "$PERSIST_DIR/$dir" ]; then
+      mkdir -p "$CONFIG_DIR/$dir"
+      cp -a "$PERSIST_DIR/$dir/." "$CONFIG_DIR/$dir/" 2>/dev/null || true
+    fi
+  done
+  for file in "${STATE_FILES[@]}"; do
+    if [ -f "$PERSIST_DIR/$file" ]; then
+      cp -a "$PERSIST_DIR/$file" "$CONFIG_DIR/$file" 2>/dev/null || true
+    fi
+  done
 }
 
 persist_runtime_state() {
   mkdir -p "$PERSIST_DIR"
-  cp -a "$CONFIG_DIR/." "$PERSIST_DIR/" 2>/dev/null || true
+  local dir
+  local file
+  for dir in "${STATE_DIRS[@]}"; do
+    if [ -d "$CONFIG_DIR/$dir" ]; then
+      mkdir -p "$PERSIST_DIR/$dir"
+      cp -a "$CONFIG_DIR/$dir/." "$PERSIST_DIR/$dir/" 2>/dev/null || true
+    fi
+  done
+  for file in "${STATE_FILES[@]}"; do
+    if [ -f "$CONFIG_DIR/$file" ]; then
+      cp -a "$CONFIG_DIR/$file" "$PERSIST_DIR/$file" 2>/dev/null || true
+    fi
+  done
 }
 
 restore_runtime_state
