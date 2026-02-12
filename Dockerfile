@@ -18,6 +18,7 @@ RUN apt-get update \
        python3-pip \
        python3-venv \
        ripgrep \
+       sqlite3 \
        tmux \
        wget \
     && rm -rf /var/lib/apt/lists/* \
@@ -78,6 +79,44 @@ RUN set -eu; \
         sed -i -E 's/await[[:space:]]+([A-Za-z0-9_$.]+)\.chmod\(([^;]*),[[:space:]]*(0o600|384)\);/await \1.chmod(\2, \3).catch(() => {});/g' "$f"; \
       done; \
     fi
+
+# SQLite locks can happen under concurrent memory searches + indexing.
+# Set WAL + busy_timeout to reduce transient SQLITE_BUSY errors.
+RUN set -eu; \
+	    OPENCLAW_DIR="$(npm root -g)/openclaw"; \
+	    FILE="$OPENCLAW_DIR/dist/memory/manager.js"; \
+	    if [ -f "$FILE" ]; then \
+	      python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
+if "PRAGMA busy_timeout" in s and "journal_mode = WAL" in s: print("openclaw sqlite pragmas: already patched"); sys.exit(0); \
+needle="const { DatabaseSync } = requireNodeSqlite();\n        return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });"; \
+if needle not in s: print("openclaw sqlite pragmas: pattern not found (skipping)", file=sys.stderr); sys.exit(0); \
+replacement=( \
+  "const { DatabaseSync } = requireNodeSqlite();\n" \
+  "        const db = new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });\n" \
+  "        try {\n" \
+  "            db.exec(\"PRAGMA journal_mode = WAL\");\n" \
+  "        }\n" \
+  "        catch {\n" \
+  "        }\n" \
+  "        try {\n" \
+  "            db.exec(\"PRAGMA synchronous = NORMAL\");\n" \
+  "        }\n" \
+  "        catch {\n" \
+  "        }\n" \
+  "        try {\n" \
+  "            db.exec(\"PRAGMA busy_timeout = 5000\");\n" \
+  "        }\n" \
+  "        catch {\n" \
+  "        }\n" \
+  "        try {\n" \
+  "            db.exec(\"PRAGMA foreign_keys = ON\");\n" \
+  "        }\n" \
+  "        catch {\n" \
+  "        }\n" \
+  "        return db;" \
+); \
+p.write_text(s.replace(needle, replacement)); print("openclaw sqlite pragmas: patched", p);' "$FILE"; \
+	    fi
 
 # Install Lobster workflow engine
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
