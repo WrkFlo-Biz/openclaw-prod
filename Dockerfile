@@ -107,6 +107,21 @@ s2=s if rep in s else re.sub(pat, rep, s, count=1); \
       done; \
     fi
 
+# Fix: OpenClaw 2026.2.12+ sometimes resolves session transcript paths without passing agentId,
+# defaulting to "main" and rejecting sessionFile paths for other agents (breaks Telegram inbound).
+RUN set -eu; \
+    OPENCLAW_DIR="$(npm root -g)/openclaw"; \
+    if [ -d "$OPENCLAW_DIR/dist" ]; then \
+      for f in $(rg -l 'const sessionFile = resolveSessionFilePath\(sessionIdFinal,\s*sessionEntry\);' "$OPENCLAW_DIR/dist" || true); do \
+        python3 -c 'import pathlib,re,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
+pat=r"const\\s+sessionFile\\s*=\\s*resolveSessionFilePath\\(sessionIdFinal,\\s*sessionEntry\\);"; \
+rep="const sessionFile = resolveSessionFilePath(sessionIdFinal, sessionEntry, { agentId });"; \
+s2,n=re.subn(pat, rep, s); \
+print(f"openclaw sessionFile agentId: patched {p} ({n})") if n else print(f"openclaw sessionFile agentId: skip {p}"); \
+(p.write_text(s2)) if n else None' "$f"; \
+      done; \
+    fi
+
 # Install Lobster workflow engine
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
     && cd /opt/lobster && pnpm install && pnpm build && npm link
