@@ -69,6 +69,7 @@ persist_runtime_state() {
   # Keep Azure Files state clean: atomic writes can leave orphan *.tmp files and noisy backups.
   prune_telegram_tmp_persist
   prune_cron_tmp_persist
+  prune_cron_backups_persist
   prune_config_backups_persist
 }
 
@@ -86,6 +87,33 @@ prune_cron_tmp_runtime() {
 
 prune_cron_tmp_persist() {
   find "$PERSIST_DIR/cron" -maxdepth 1 -type f -name '*.tmp' -delete 2>/dev/null || true
+}
+
+prune_cron_backups_persist() {
+  # Retain a small tail of cron snapshots; old ones create noise and consume space.
+  local keep="${OPENCLAW_CRON_SNAPSHOT_KEEP:-5}"
+  local cron_dir="$PERSIST_DIR/cron"
+
+  # Best-effort: if keep is invalid, fall back to 5.
+  if ! [[ "$keep" =~ ^[0-9]+$ ]] || [ "$keep" -lt 1 ]; then
+    keep=5
+  fi
+
+  # Drop timestamped backups like jobs.json.bak.<epoch>; keep jobs.json.bak.
+  rm -f "$cron_dir"/jobs.json.bak.* 2>/dev/null || true
+
+  shopt -s nullglob
+  local snapshots=( "$cron_dir"/jobs.json.pre-brief.*.bak )
+  if [ "${#snapshots[@]}" -gt "$keep" ] 2>/dev/null; then
+    IFS=$'\n' sorted=( $(printf '%s\n' "${snapshots[@]}" | sort) )
+    unset IFS
+    local delete_count=$((${#sorted[@]} - keep))
+    local i
+    for ((i=0; i<delete_count; i++)); do
+      rm -f "${sorted[$i]}" 2>/dev/null || true
+    done
+  fi
+  shopt -u nullglob
 }
 
 prune_config_backups_runtime() {
@@ -111,6 +139,7 @@ prune_telegram_tmp_runtime
 prune_telegram_tmp_persist
 prune_cron_tmp_runtime
 prune_cron_tmp_persist
+prune_cron_backups_persist
 prune_config_backups_runtime
 prune_config_backups_persist
 
