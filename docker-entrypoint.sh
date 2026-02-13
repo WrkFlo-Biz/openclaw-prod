@@ -132,6 +132,126 @@ prune_config_backups_persist() {
     2>/dev/null || true
 }
 
+sanitize_sessions_sessionfile_paths() {
+  # OpenClaw persists `sessionFile` paths in sessions.json. When state is restored from
+  # Azure Files to the runtime state dir, those paths can point outside the current
+  # sessions dir (e.g. old `/data/...` paths), causing:
+  #   "Session file path must be within sessions directory"
+  # This breaks inbound handlers (Telegram) and heartbeat.
+  if ! command -v node >/dev/null 2>&1; then
+    echo "WARNING: node not found; skipping sessionFile sanitization"
+    return 0
+  fi
+
+  shopt -s nullglob
+  local session_files=( "$CONFIG_DIR"/agents/*/sessions/sessions.json )
+  shopt -u nullglob
+  if [ "${#session_files[@]}" -eq 0 ] 2>/dev/null; then
+    return 0
+  fi
+
+  local f
+  for f in "${session_files[@]}"; do
+    node -e '
+const fs = require("fs");
+const path = require("path");
+
+const filePath = process.argv[2];
+const persistDir = process.argv[3] || "";
+const runtimeDir = process.argv[4] || "";
+const sessionsDir = path.dirname(filePath);
+const agentId = path.basename(path.dirname(sessionsDir));
+
+function isWithinDir(baseDir, targetPath) {
+  const rel = path.relative(baseDir, targetPath);
+  return !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+function normalizeSessionFile(sessionFile) {
+  if (typeof sessionFile !== "string") return { ok: false };
+  let sf = sessionFile.trim();
+  if (!sf) return { ok: false };
+
+  // Map persisted absolute paths into the runtime state dir.
+  if (path.isAbsolute(sf) && persistDir && runtimeDir) {
+    const pd = persistDir.endsWith(path.sep) ? persistDir : persistDir + path.sep;
+    if (sf.startsWith(pd)) {
+      sf = path.join(runtimeDir, sf.slice(pd.length));
+    }
+  }
+
+  const resolved = path.resolve(sessionsDir, sf);
+  if (isWithinDir(sessionsDir, resolved)) {
+    const rel = path.relative(sessionsDir, resolved);
+    // Avoid returning a directory path.
+    if (!rel || rel.endsWith(path.sep)) return { ok: false };
+    return { ok: true, value: rel };
+  }
+
+  // Best-effort salvage: if the basename exists inside sessionsDir, rewrite to basename.
+  const base = path.basename(sf);
+  const salvage = path.join(sessionsDir, base);
+  if (isWithinDir(sessionsDir, salvage) && fs.existsSync(salvage)) {
+    return { ok: true, value: base };
+  }
+
+  return { ok: false };
+}
+
+function walk(node) {
+  if (!node || typeof node !== "object") return 0;
+  let changes = 0;
+  if (Array.isArray(node)) {
+    for (const item of node) changes += walk(item);
+    return changes;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(node, "sessionFile")) {
+    const norm = normalizeSessionFile(node.sessionFile);
+    if (!norm.ok) {
+      delete node.sessionFile;
+      changes += 1;
+    } else if (node.sessionFile !== norm.value) {
+      node.sessionFile = norm.value;
+      changes += 1;
+    }
+  }
+
+  for (const v of Object.values(node)) changes += walk(v);
+  return changes;
+}
+
+let raw = "";
+try {
+  raw = fs.readFileSync(filePath, "utf8");
+} catch {
+  process.exit(0);
+}
+
+let data;
+try {
+  data = JSON.parse(raw);
+} catch (e) {
+  console.error(`[sessions-sanitize] ${agentId}: invalid JSON in sessions store (${e && e.message ? e.message : e})`);
+  process.exit(0);
+}
+
+const changed = walk(data);
+if (changed > 0) {
+  const tmpPath = filePath + ".tmp";
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(data) + "\n");
+    fs.renameSync(tmpPath, filePath);
+  } catch (e) {
+    console.error(`[sessions-sanitize] ${agentId}: failed to write sanitized sessions.json (${e && e.message ? e.message : e})`);
+    process.exit(0);
+  }
+  console.log(`[sessions-sanitize] ${agentId}: fixed ${changed} sessionFile path(s)`);
+}
+' "$f" "$PERSIST_DIR" "$CONFIG_DIR" 2>/dev/null || true
+  done
+}
+
 restore_runtime_state
 
 # Cleanup any stale temp files that were restored/persisted previously.
@@ -232,6 +352,9 @@ else
   find "$CONFIG_DIR/agents" -name "sessions.json" -delete 2>/dev/null || true
   touch "$CONFIG_DIR/.sessions-cleared-v3"
 fi
+
+# Fix up any persisted sessionFile paths that point outside the sessions dir.
+sanitize_sessions_sessionfile_paths
 
 # One-time: nuke memory index so it rebuilds with Azure OpenAI embeddings.
 if [ -f "$CONFIG_DIR/.memory-index-reset-aoai-embed3" ]; then
