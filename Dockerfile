@@ -93,6 +93,20 @@ p.write_text(s if ("PRAGMA busy_timeout" in s or n not in s) else s.replace(n, r
       done; \
     fi
 
+# Cron "announce" delivery is currently failing (cron jobs run, but do not post to Telegram).
+# Force cron delivery to use direct outbound delivery for any deliverable output (including plain text).
+RUN set -eu; \
+    OPENCLAW_DIR="$(npm root -g)/openclaw"; \
+    if [ -d "$OPENCLAW_DIR/dist" ]; then \
+      for f in $(rg -l 'cron announce delivery failed' "$OPENCLAW_DIR/dist" || true); do \
+        python3 -c 'import pathlib,re,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
+rep="const deliveryPayloadHasStructuredContent = deliveryPayloads.length > 0;"; \
+pat=r"const deliveryPayloadHasStructuredContent = [^;]+;"; \
+s2=s if rep in s else re.sub(pat, rep, s, count=1); \
+(p.write_text(s2), print(f"openclaw cron delivery: patched {p}")) if s2!=s else print(f"openclaw cron delivery: skip {p}")' "$f"; \
+      done; \
+    fi
+
 # Install Lobster workflow engine
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
     && cd /opt/lobster && pnpm install && pnpm build && npm link
