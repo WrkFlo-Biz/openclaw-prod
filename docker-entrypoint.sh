@@ -60,9 +60,24 @@ persist_runtime_state() {
       cp -a "$CONFIG_DIR/$file" "$PERSIST_DIR/$file" 2>/dev/null || true
     fi
   done
+
+  # Keep Azure Files state clean: atomic writes on network volumes can leave orphan *.tmp files.
+  prune_telegram_tmp_persist
+}
+
+prune_telegram_tmp_runtime() {
+  find "$CONFIG_DIR/telegram" -maxdepth 1 -type f -name '*.tmp' -delete 2>/dev/null || true
+}
+
+prune_telegram_tmp_persist() {
+  find "$PERSIST_DIR/telegram" -maxdepth 1 -type f -name '*.tmp' -delete 2>/dev/null || true
 }
 
 restore_runtime_state
+
+# Cleanup any stale temp files that were restored/persisted previously.
+prune_telegram_tmp_runtime
+prune_telegram_tmp_persist
 
 export OPENCLAW_STATE_DIR="$CONFIG_DIR"
 export OPENCLAW_CONFIG_PATH="$CONFIG_FILE"
