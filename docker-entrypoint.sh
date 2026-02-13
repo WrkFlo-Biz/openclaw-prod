@@ -46,6 +46,11 @@ restore_runtime_state() {
 }
 
 persist_runtime_state() {
+  # Avoid copying back transient artifacts to Azure Files.
+  prune_telegram_tmp_runtime
+  prune_cron_tmp_runtime
+  prune_config_backups_runtime
+
   mkdir -p "$PERSIST_DIR"
   local dir
   local file
@@ -61,8 +66,10 @@ persist_runtime_state() {
     fi
   done
 
-  # Keep Azure Files state clean: atomic writes on network volumes can leave orphan *.tmp files.
+  # Keep Azure Files state clean: atomic writes can leave orphan *.tmp files and noisy backups.
   prune_telegram_tmp_persist
+  prune_cron_tmp_persist
+  prune_config_backups_persist
 }
 
 prune_telegram_tmp_runtime() {
@@ -73,11 +80,39 @@ prune_telegram_tmp_persist() {
   find "$PERSIST_DIR/telegram" -maxdepth 1 -type f -name '*.tmp' -delete 2>/dev/null || true
 }
 
+prune_cron_tmp_runtime() {
+  find "$CONFIG_DIR/cron" -maxdepth 1 -type f -name '*.tmp' -delete 2>/dev/null || true
+}
+
+prune_cron_tmp_persist() {
+  find "$PERSIST_DIR/cron" -maxdepth 1 -type f -name '*.tmp' -delete 2>/dev/null || true
+}
+
+prune_config_backups_runtime() {
+  rm -f \
+    "$CONFIG_DIR/config/.write_test" \
+    "$CONFIG_DIR/config/docker-entrypoint.custom.sh.bak."* \
+    "$CONFIG_DIR/config/mcporter.json.bak."* \
+    2>/dev/null || true
+}
+
+prune_config_backups_persist() {
+  rm -f \
+    "$PERSIST_DIR/config/.write_test" \
+    "$PERSIST_DIR/config/docker-entrypoint.custom.sh.bak."* \
+    "$PERSIST_DIR/config/mcporter.json.bak."* \
+    2>/dev/null || true
+}
+
 restore_runtime_state
 
 # Cleanup any stale temp files that were restored/persisted previously.
 prune_telegram_tmp_runtime
 prune_telegram_tmp_persist
+prune_cron_tmp_runtime
+prune_cron_tmp_persist
+prune_config_backups_runtime
+prune_config_backups_persist
 
 export OPENCLAW_STATE_DIR="$CONFIG_DIR"
 export OPENCLAW_CONFIG_PATH="$CONFIG_FILE"

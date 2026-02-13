@@ -182,9 +182,6 @@ AFTERNOON_PROMPT="$(build_prompt "Afternoon Prep" "6h" "$AFTERNOON_VARIANT")"
 EOD_PROMPT="$(build_prompt "EOD Closeout" "rest_of_day" "$EOD_VARIANT")"
 
 NOW_MS="$(($(date +%s) * 1000))"
-SNAPSHOT="${JOBS_FILE}.pre-brief.$(date +%s).bak"
-cp "$JOBS_FILE" "$SNAPSHOT" 2>/dev/null || true
-
 TMP_FILE="$(mktemp)"
 
 jq \
@@ -264,8 +261,40 @@ jq \
     )
   ' "$JOBS_FILE" > "$TMP_FILE"
 
+# Validate the candidate JSON and avoid churn if nothing actually changed.
+jq '.' "$TMP_FILE" >/dev/null
+
+CANON_OLD="$(mktemp)"
+CANON_NEW="$(mktemp)"
+jq -S -c '.' "$JOBS_FILE" > "$CANON_OLD" 2>/dev/null || printf '%s\n' '' > "$CANON_OLD"
+jq -S -c '.' "$TMP_FILE" > "$CANON_NEW" 2>/dev/null || printf '%s\n' '' > "$CANON_NEW"
+
+if cmp -s "$CANON_OLD" "$CANON_NEW"; then
+  rm -f "$TMP_FILE" "$CANON_OLD" "$CANON_NEW"
+  echo "Daily brief cron jobs already up to date in ${JOBS_FILE}"
+  exit 0
+fi
+
+rm -f "$CANON_OLD" "$CANON_NEW"
+
+SNAPSHOT="${JOBS_FILE}.pre-brief.$(date +%s).bak"
+cp "$JOBS_FILE" "$SNAPSHOT" 2>/dev/null || true
+
 mv "$TMP_FILE" "$JOBS_FILE"
 jq '.' "$JOBS_FILE" >/dev/null
+
+# Keep the cron directory tidy: retain only a small tail of pre-brief snapshots.
+shopt -s nullglob
+snapshots=( "$CRON_DIR"/jobs.json.pre-brief.*.bak )
+if [ "${#snapshots[@]}" -gt 5 ]; then
+  IFS=$'\n' sorted=( $(printf '%s\n' "${snapshots[@]}" | sort) )
+  unset IFS
+  delete_count=$((${#sorted[@]} - 5))
+  for ((i=0; i<delete_count; i++)); do
+    rm -f "${sorted[$i]}" 2>/dev/null || true
+  done
+fi
+shopt -u nullglob
 
 echo "Configured daily brief cron jobs (4x/day, ${TZ_NAME}) in ${JOBS_FILE}"
 echo "Backup snapshot: ${SNAPSHOT}"
