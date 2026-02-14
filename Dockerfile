@@ -108,17 +108,34 @@ s2=s if rep in s else re.sub(pat, rep, s, count=1); \
     fi
 
 # Fix: OpenClaw 2026.2.12+ sometimes resolves session transcript paths without passing agentId,
-# defaulting to "main" and rejecting sessionFile paths for other agents (breaks Telegram inbound).
+# defaulting to "main" and rejecting absolute sessionFile paths for other agents (breaks Telegram + heartbeat).
+# Patch resolveSessionFilePath to accept persisted absolute sessionFile paths under OPENCLAW_STATE_DIR/agents/*/sessions.
 RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     if [ -d "$OPENCLAW_DIR/dist" ]; then \
-      for f in $(rg -l 'const sessionFile = resolveSessionFilePath\(sessionIdFinal,\s*sessionEntry\);' "$OPENCLAW_DIR/dist" || true); do \
-        python3 -c 'import pathlib,re,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
-pat=r"const\\s+sessionFile\\s*=\\s*resolveSessionFilePath\\(sessionIdFinal,\\s*sessionEntry\\);"; \
-rep="const sessionFile = resolveSessionFilePath(sessionIdFinal, sessionEntry, { agentId });"; \
-s2,n=re.subn(pat, rep, s); \
-print(f"openclaw sessionFile agentId: patched {p} ({n})") if n else print(f"openclaw sessionFile agentId: skip {p}"); \
-(p.write_text(s2)) if n else None' "$f"; \
+      for f in $(rg -l --glob '*.js' 'function resolveSessionFilePath\\(sessionId, entry, opts\\) \\{' "$OPENCLAW_DIR/dist" || true); do \
+        python3 -c 'import pathlib,re,sys; \
+p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
+marker=\"parts[0] === \\\"agents\\\" && parts[2] === \\\"sessions\\\"\"; \
+if marker in s and \"resolveStateDir(process.env\" in s: \
+  print(f\"openclaw sessionFile absolute: skip {p}\"); sys.exit(0); \
+pat=r\"if\\s*\\(candidate\\)\\s*return\\s*resolvePathWithinSessionsDir\\(\\s*sessionsDir\\s*,\\s*candidate\\s*\\);\"; \
+rep=(\"if (candidate) {\\n\" \
+\"\\t\\tif (path.isAbsolute(candidate)) {\\n\" \
+\"\\t\\t\\tconst root = resolveStateDir(process.env, () => resolveRequiredHomeDir(process.env, os.homedir));\\n\" \
+\"\\t\\t\\tconst resolvedRoot = path.resolve(root);\\n\" \
+\"\\t\\t\\tconst resolvedCandidate = path.resolve(candidate);\\n\" \
+\"\\t\\t\\tconst rel = path.relative(resolvedRoot, resolvedCandidate);\\n\" \
+\"\\t\\t\\tif (!rel.startsWith(\\\"..\\\") && !path.isAbsolute(rel)) {\\n\" \
+\"\\t\\t\\t\\tconst parts = rel.split(path.sep);\\n\" \
+\"\\t\\t\\t\\tif (parts.length >= 4 && parts[0] === \\\"agents\\\" && parts[2] === \\\"sessions\\\") return resolvedCandidate;\\n\" \
+\"\\t\\t\\t}\\n\" \
+\"\\t\\t}\\n\" \
+\"\\t\\treturn resolvePathWithinSessionsDir(sessionsDir, candidate);\\n\" \
+\"\\t}\"); \
+s2,n=re.subn(pat, rep, s, count=1); \
+print(f\"openclaw sessionFile absolute: patched {p}\") if n else print(f\"openclaw sessionFile absolute: no-match {p}\"); \
+p.write_text(s2) if n else None' "$f"; \
       done; \
     fi
 
