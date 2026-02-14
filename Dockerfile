@@ -114,28 +114,7 @@ RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     if [ -d "$OPENCLAW_DIR/dist" ]; then \
       for f in $(rg -l --glob '*.js' 'function resolveSessionFilePath' "$OPENCLAW_DIR/dist" || true); do \
-        python3 -c 'import pathlib,re,sys; \
-p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
-marker=\"parts[0] === \\\"agents\\\" && parts[2] === \\\"sessions\\\"\"; \
-if marker in s and \"resolveStateDir(process.env\" in s: \
-  print(f\"openclaw sessionFile absolute: skip {p}\"); sys.exit(0); \
-pat=r\"if\\s*\\(candidate\\)\\s*return\\s*resolvePathWithinSessionsDir\\(\\s*sessionsDir\\s*,\\s*candidate\\s*\\);\"; \
-rep=(\"if (candidate) {\\n\" \
-\"\\t\\tif (path.isAbsolute(candidate)) {\\n\" \
-\"\\t\\t\\tconst root = resolveStateDir(process.env, () => resolveRequiredHomeDir(process.env, os.homedir));\\n\" \
-\"\\t\\t\\tconst resolvedRoot = path.resolve(root);\\n\" \
-\"\\t\\t\\tconst resolvedCandidate = path.resolve(candidate);\\n\" \
-\"\\t\\t\\tconst rel = path.relative(resolvedRoot, resolvedCandidate);\\n\" \
-\"\\t\\t\\tif (!rel.startsWith(\\\"..\\\") && !path.isAbsolute(rel)) {\\n\" \
-\"\\t\\t\\t\\tconst parts = rel.split(path.sep);\\n\" \
-\"\\t\\t\\t\\tif (parts.length >= 4 && parts[0] === \\\"agents\\\" && parts[2] === \\\"sessions\\\") return resolvedCandidate;\\n\" \
-\"\\t\\t\\t}\\n\" \
-\"\\t\\t}\\n\" \
-\"\\t\\treturn resolvePathWithinSessionsDir(sessionsDir, candidate);\\n\" \
-\"\\t}\"); \
-s2,n=re.subn(pat, rep, s, count=1); \
-print(f\"openclaw sessionFile absolute: patched {p}\") if n else print(f\"openclaw sessionFile absolute: no-match {p}\"); \
-p.write_text(s2) if n else None' "$f"; \
+        python3 -c 'import pathlib,re,sys; p=pathlib.Path(sys.argv[1]); s=p.read_text(); marker="parts[0] === \"agents\" && parts[2] === \"sessions\""; cond=(marker in s and "resolveStateDir(process.env" in s); print(f"openclaw sessionFile absolute: skip {p}") if cond else None; sys.exit(0) if cond else None; pat=r"if\s*\(candidate\)\s*return\s*resolvePathWithinSessionsDir\(\s*sessionsDir\s*,\s*candidate\s*\);"; rep="if (candidate) { if (path.isAbsolute(candidate)) { const root = resolveStateDir(process.env, () => resolveRequiredHomeDir(process.env, os.homedir)); const resolvedRoot = path.resolve(root); const resolvedCandidate = path.resolve(candidate); const rel = path.relative(resolvedRoot, resolvedCandidate); if (!rel.startsWith(\"..\") && !path.isAbsolute(rel)) { const parts = rel.split(path.sep); if (parts.length >= 4 && parts[0] === \"agents\" && parts[2] === \"sessions\") return resolvedCandidate; } } return resolvePathWithinSessionsDir(sessionsDir, candidate); }"; s2,n=re.subn(pat, rep, s, count=1); print(f"openclaw sessionFile absolute: patched {p}") if n else print(f"openclaw sessionFile absolute: no-match {p}"); p.write_text(s2) if n else None' "$f"; \
       done; \
     fi
 
