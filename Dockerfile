@@ -113,7 +113,7 @@ s2=s if rep in s else re.sub(pat, rep, s, count=1); \
 RUN set -eu; \
     OPENCLAW_DIR="$(npm root -g)/openclaw"; \
     if [ -d "$OPENCLAW_DIR/dist" ]; then \
-      for f in $(rg -l --glob '*.js' 'function resolveSessionFilePath\\(sessionId, entry, opts\\) \\{' "$OPENCLAW_DIR/dist" || true); do \
+      for f in $(rg -l --glob '*.js' 'function resolveSessionFilePath' "$OPENCLAW_DIR/dist" || true); do \
         python3 -c 'import pathlib,re,sys; \
 p=pathlib.Path(sys.argv[1]); s=p.read_text(); \
 marker=\"parts[0] === \\\"agents\\\" && parts[2] === \\\"sessions\\\"\"; \
