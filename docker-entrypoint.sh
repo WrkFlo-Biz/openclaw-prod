@@ -43,6 +43,8 @@ restore_runtime_state() {
       cp -a "$PERSIST_DIR/$file" "$CONFIG_DIR/$file" 2>/dev/null || true
     fi
   done
+  # Clear stale session lock files restored from Azure Files (previous PID is dead).
+  find "$CONFIG_DIR" -name '*.lock' -type f -delete 2>/dev/null || true
 }
 
 persist_runtime_state() {
@@ -50,6 +52,8 @@ persist_runtime_state() {
   prune_telegram_tmp_runtime
   prune_cron_tmp_runtime
   prune_config_backups_runtime
+  # Never persist session lock files — they are PID-specific and stale after restart.
+  find "$CONFIG_DIR" -name '*.lock' -type f -delete 2>/dev/null || true
 
   mkdir -p "$PERSIST_DIR"
   local dir
