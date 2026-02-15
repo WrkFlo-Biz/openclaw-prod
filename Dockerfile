@@ -118,6 +118,94 @@ RUN set -eu; \
       done; \
     fi
 
+# Canvas auth is gated by `Authorization: Bearer ...`, which browsers can't attach to navigations or WebSocket handshakes.
+# Patch gateway canvas auth to support a cookie:
+# - Visiting any `__openclaw__/canvas/*?token=<gateway token>` sets an HttpOnly cookie and 302s to the same URL without `token`.
+# - Subsequent canvas HTTP and `__openclaw__/ws` connections are authorized via that cookie.
+RUN set -eu; \
+    OPENCLAW_DIR="$(npm root -g)/openclaw"; \
+    if [ -d "$OPENCLAW_DIR/dist" ]; then \
+      for f in $(rg -l 'async function authorizeCanvasRequest\\(params\\)' "$OPENCLAW_DIR/dist" || true); do \
+        python3 - "$f" <<'PY'
+import pathlib
+import re
+import sys
+
+p = pathlib.Path(sys.argv[1])
+s = p.read_text(encoding="utf-8")
+
+cookie_name = "openclaw_canvas_token"
+if cookie_name in s:
+    print(f"openclaw canvas cookie auth: skip {p}")
+    raise SystemExit(0)
+
+# 1) authorizeCanvasRequest: accept cookie token in addition to Bearer token.
+needle = "let lastAuthFailure = null;\n\tconst token = getBearerToken(req);"
+if needle not in s:
+    raise SystemExit(f"openclaw canvas cookie auth: missing needle in {p}")
+
+cookie_patch = "\n".join(
+    [
+        "let lastAuthFailure = null;",
+        "\tlet token = getBearerToken(req);",
+        "\tif (!token) {",
+        "\t\tconst cookie = getHeader(req, \"cookie\") ?? \"\";",
+        f"\t\tconst m = cookie.match(/(?:^|;\\s*){cookie_name}=([^;]+)/);",
+        "\t\tif (m) {",
+        "\t\t\ttry { token = decodeURIComponent(m[1]); } catch { token = m[1]; }",
+        "\t\t}",
+        "\t}",
+    ]
+)
+
+s = s.replace(needle, cookie_patch, 1)
+
+# 2) createGatewayHttpServer handleRequest: if ?token= is present on a canvas URL, set cookie and redirect.
+# Insert before the authorizeCanvasRequest call in the `if (isCanvasPath(requestPath)) { ... }` block.
+m = re.search(r"if \(isCanvasPath\(requestPath\)\) \{\n(?P<indent>\t+)const ok = await authorizeCanvasRequest", s)
+if not m:
+    raise SystemExit(f"openclaw canvas cookie auth: missing canvas auth block in {p}")
+indent = m.group("indent")
+
+insert_lines = [
+    f"{indent}const canvasUrl = new URL(req.url ?? \"/\", \"http://localhost\");",
+    f"{indent}const queryToken = canvasUrl.searchParams.get(\"token\")?.trim();",
+    f"{indent}if (queryToken) {{",
+    f"{indent}\tconst authResult = await authorizeGatewayConnect({{",
+    f"{indent}\t\tauth: {{ ...resolvedAuth, allowTailscale: false }},",
+    f"{indent}\t\tconnectAuth: {{ token: queryToken, password: queryToken }},",
+    f"{indent}\t\treq,",
+    f"{indent}\t\ttrustedProxies,",
+    f"{indent}\t\trateLimiter",
+    f"{indent}\t}});",
+    f"{indent}\tif (!authResult.ok) {{",
+    f"{indent}\t\tsendGatewayAuthFailure(res, authResult);",
+    f"{indent}\t\treturn;",
+    f"{indent}\t}}",
+    f"{indent}\tres.setHeader(\"Set-Cookie\", \"{cookie_name}=\" + encodeURIComponent(queryToken) + \"; Path=/__openclaw__/; HttpOnly; Secure; SameSite=Lax\");",
+    f"{indent}\tcanvasUrl.searchParams.delete(\"token\");",
+    f"{indent}\tconst qs = canvasUrl.searchParams.toString();",
+    f"{indent}\tres.statusCode = 302;",
+    f"{indent}\tres.setHeader(\"Cache-Control\", \"no-store\");",
+    f"{indent}\tres.setHeader(\"Location\", canvasUrl.pathname + (qs ? \"?\" + qs : \"\"));",
+    f"{indent}\tres.end();",
+    f"{indent}\treturn;",
+    f"{indent}}}",
+]
+insert = "\n".join(insert_lines) + "\n"
+
+needle2 = f"\n{indent}const ok = await authorizeCanvasRequest"
+if needle2 not in s:
+    raise SystemExit(f"openclaw canvas cookie auth: missing authorizeCanvasRequest callsite in {p}")
+
+s = s.replace(needle2, "\n" + insert + indent + "const ok = await authorizeCanvasRequest", 1)
+
+p.write_text(s, encoding="utf-8")
+print(f"openclaw canvas cookie auth: patched {p}")
+PY
+      done; \
+    fi
+
 # Install Lobster workflow engine
 RUN git clone https://github.com/openclaw/lobster.git /opt/lobster \
     && cd /opt/lobster && pnpm install && pnpm build && npm link

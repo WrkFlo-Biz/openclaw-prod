@@ -26,7 +26,7 @@ STATE_PERSIST_EXTRA_DIRS=(
 )
 STATE_FILES=(
   ".sessions-cleared-v3"
-  ".memory-index-reset-aoai-embed3"
+  ".memory-index-reset-aoai-embed3-v2"
   "openclaw.json"
 )
 
@@ -363,13 +363,13 @@ fi
 sanitize_sessions_sessionfile_paths
 
 # One-time: nuke memory index so it rebuilds with Azure OpenAI embeddings.
-if [ -f "$CONFIG_DIR/.memory-index-reset-aoai-embed3" ]; then
+if [ -f "$CONFIG_DIR/.memory-index-reset-aoai-embed3-v2" ]; then
   echo "Memory index already reset for Azure OpenAI embeddings."
 else
   echo "Resetting memory index to force Azure OpenAI embeddings rebuild..."
   rm -f "$MEMORY_DB_DIR/"*.sqlite "$MEMORY_DB_DIR/"*.sqlite-* 2>/dev/null || true
   rm -f "$MEMORY_CACHE_DIR/"*.sqlite "$MEMORY_CACHE_DIR/"*.sqlite-* 2>/dev/null || true
-  touch "$CONFIG_DIR/.memory-index-reset-aoai-embed3"
+  touch "$CONFIG_DIR/.memory-index-reset-aoai-embed3-v2"
 fi
 
 # Restore cached index into /tmp so memory search is warm after restarts.
