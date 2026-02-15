@@ -9,9 +9,11 @@ CONFIG_FILE="$CONFIG_DIR/openclaw.json"
 # Persist snapshots to Azure Files so state is restored across container restarts.
 STATE_RESTORE_DIRS=(
   "agents"
+  "canvas"
   "config"
   "credentials"
   "cron"
+  "devices"
   "memory"
   "shared"
   "slack"
