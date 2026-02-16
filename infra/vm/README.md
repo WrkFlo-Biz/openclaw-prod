@@ -43,3 +43,14 @@ This directory contains the VM-first production topology for OpenClaw.
   - `openclaw node install --host 127.0.0.1 --port 18789 --display-name "<your-machine>" --force`
   - `openclaw node restart`
   - If node logs show `EPROTO` on localhost, remove `--tls` from `~/Library/LaunchAgents/ai.openclaw.node.plist` and restart the LaunchAgent.
+
+## Tailscale Serve
+
+- Bring VM onto tailnet:
+  - `sudo tailscale up --hostname openclaw-gateway-vm --ssh`
+- If Serve is not enabled on the tailnet, run:
+  - `sudo tailscale serve --yes --bg 127.0.0.1:18789`
+  - Follow the one-time admin approval URL printed by Tailscale.
+- Verify:
+  - `sudo tailscale serve status`
+  - `sudo tailscale status --json | jq -r '.Self.DNSName'`
