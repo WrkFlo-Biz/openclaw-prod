@@ -806,8 +806,7 @@ jq -n \
     "bind": $gw_bind,
     "controlUi": {
       "enabled": true,
-      "allowInsecureAuth": true,
-      "dangerouslyDisableDeviceAuth": true
+      "allowInsecureAuth": true
     },
     "trustedProxies": [
       "127.0.0.1",
