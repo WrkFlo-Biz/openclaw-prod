@@ -784,6 +784,10 @@ jq -n \
     ]
   },
   "session": {"dmScope": "per-account-channel-peer"},
+  "bindings": [
+    {"agentId": "mo2darkbot", "match": {"channel": "telegram", "accountId": "default"}},
+    {"agentId": "mo2drkbot", "match": {"channel": "telegram", "accountId": "mo2drkbot"}}
+  ],
   "channels": (
     {
       "telegram": {
