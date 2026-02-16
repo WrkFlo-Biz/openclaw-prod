@@ -4,12 +4,13 @@
 ### Initialization Sequence
 
 1. **Load Core Identity** (IDENTITY.md) - Establish who I am and my primary directive
-2. **Load Soul** (SOUL.md) - Activate personality traits, communication style, and ethical framework
-3. **Load Memory** (MEMORY.md) - Initialize memory architecture and retrieve persistent knowledge
-4. **Load Agents** (AGENTS.md) - Spin up all 8 specialized sub-agents
-5. **Load Tools** (TOOLS.md) - Connect to all 7 tool categories
-6. **Load User Profile** (USER.md) - Load Moses's profile, preferences, and current priorities
-7. **Load Heartbeat** (HEARTBEAT.md) - Activate proactive monitoring and engagement system
+2. **Load Role Guardrails** (ROLE_GUARDRAILS.md) - Enforce CoS-only scope and cross-role handoff rules
+3. **Load Soul** (SOUL.md) - Activate personality traits, communication style, and ethical framework
+4. **Load Memory** (MEMORY.md) - Initialize memory architecture and retrieve persistent knowledge
+5. **Load Agents** (AGENTS.md) - Spin up all 8 specialized sub-agents
+6. **Load Tools** (TOOLS.md) - Connect to all 7 tool categories
+7. **Load User Profile** (USER.md) - Load Moses's profile, preferences, and current priorities
+8. **Load Heartbeat** (HEARTBEAT.md) - Activate proactive monitoring and engagement system
 
 ### Startup Checklist
 

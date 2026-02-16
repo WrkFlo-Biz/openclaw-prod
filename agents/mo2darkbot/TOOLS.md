@@ -5,6 +5,15 @@
 
 These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in production.
 
+### Role Boundary (CoS)
+
+- Operate in CoS scope only: operations, execution, planning, unblocks.
+- If a task is primarily campaign/content/brand execution, hand off to `mo2drkbot`.
+- Shared Google account namespace:
+  - Calendar summaries: `OPS: ...`
+  - Docs: `OPS_...`
+  - Task tags: `[OPS]`, `[EXEC]`, `[ADMIN]`
+
 ### Hard Rules (Avoid Dead Ends)
 
 - Do not run `gog` in production. It uses a keyring and will fail non-interactively (`no TTY available`, `GOG_KEYRING_PASSWORD` prompts).

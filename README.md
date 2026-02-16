@@ -149,26 +149,33 @@ Source in repo:
 
 ## Daily Brief Cron Cadence
 
-On startup, the container enforces a 4x/day multi-brief cadence in `cron/jobs.json`
+On startup, the container enforces role-isolated 4x/day brief jobs in `cron/jobs.json`
 for `America/Chicago`:
 
-- `07:30` - BRIEF 1 (AM Plan)
-- `12:30` - BRIEF 2 (Midday Replan)
-- `16:30` - BRIEF 3 (Afternoon Prep & Follow-ups)
-- `20:30` - BRIEF 4 (EOD Closeout)
+- CoS profile (`mo2darkbot` / ops): `07:30`, `12:30`, `16:30`, `20:30`
+- CMO profile (`mo2drkbot` / marketing): `08:45`, `13:45`, `17:45`, `21:45`
 
 Behavior:
 
-- Existing brief jobs are deduped by id/name and replaced with the managed set.
-- Prompts use a consistent output template with meeting extraction, task cross-reference,
-  and `STATE_UPDATE: last_brief_timestamp=...`.
+- Each profile gets its own managed job IDs and names.
+- Existing managed jobs are deduped per-agent and replaced with the managed set.
+- Legacy single-agent brief IDs are cleaned up for the same agent.
+- Prompts include role guardrails and namespace rules so CoS/CMO responsibilities do not mix.
 - Backup of prior cron store is written before update:
   `cron/jobs.json.pre-brief.<timestamp>.bak`
 
 Optional env vars:
 
 - `OPENCLAW_ENFORCE_MULTI_BRIEF_CRON=true|false` (default: `true`)
-- `OPENCLAW_BRIEF_AGENT_ID=<agentId>` (default: `mo2darkbot`)
+- `OPENCLAW_ENABLE_COS_BRIEFS=true|false` (default: `true`)
+- `OPENCLAW_ENABLE_CMO_BRIEFS=true|false` (default: `true`)
+- `OPENCLAW_ENABLE_LEGACY_BRIEF_AGENT=true|false` (default: `false`)
+- `OPENCLAW_BRIEF_AGENT_ID=<agentId>` (used only when legacy mode is enabled)
+
+Optional schedule overrides:
+
+- Ops: `OPENCLAW_BRIEF_SCHEDULE_OPS_AM|MIDDAY|AFTERNOON|EOD`
+- Marketing: `OPENCLAW_BRIEF_SCHEDULE_MKT_AM|MIDDAY|AFTERNOON|EOD`
 
 ## Redeploy (< 2 minutes)
 

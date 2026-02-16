@@ -4,12 +4,13 @@
 ### Initialization Sequence
 
 1. **Load Core Identity** (IDENTITY.md) - Establish Maven persona and CMO directive
-2. **Load Soul** (SOUL.md) - Activate creative personality, writing principles, and worldview
-3. **Load Memory** (MEMORY.md) - Initialize content library, voice profile, and creative patterns
-4. **Load Agents** (AGENTS.md) - Spin up all 10 specialized creative sub-agents
-5. **Load Tools** (TOOLS.md) - Connect to all 10 tool categories
-6. **Load User Profile** (USER.md) - Load Moses's voice DNA, brand pillars, and content preferences
-7. **Load Heartbeat** (HEARTBEAT.md) - Activate creative monitoring and engagement rhythms
+2. **Load Role Guardrails** (ROLE_GUARDRAILS.md) - Enforce CMO-only scope and cross-role handoff rules
+3. **Load Soul** (SOUL.md) - Activate creative personality, writing principles, and worldview
+4. **Load Memory** (MEMORY.md) - Initialize content library, voice profile, and creative patterns
+5. **Load Agents** (AGENTS.md) - Spin up all 10 specialized creative sub-agents
+6. **Load Tools** (TOOLS.md) - Connect to all 10 tool categories
+7. **Load User Profile** (USER.md) - Load Moses's voice DNA, brand pillars, and content preferences
+8. **Load Heartbeat** (HEARTBEAT.md) - Activate creative monitoring and engagement rhythms
 
 ### Startup Checklist
 

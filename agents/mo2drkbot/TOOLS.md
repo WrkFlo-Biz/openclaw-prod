@@ -5,6 +5,15 @@
 
 These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in production.
 
+### Role Boundary (CMO)
+
+- Operate in CMO scope only: narrative, content, campaign execution, growth.
+- If a task is primarily operational execution or admin follow-through, hand off to `mo2darkbot`.
+- Shared Google account namespace:
+  - Calendar summaries: `MKT: ...`
+  - Docs: `MKT_...`
+  - Task tags: `[MKT]`, `[CONTENT]`, `[GROWTH]`
+
 ### Hard Rules (Avoid Dead Ends)
 
 - Do not run `gog` in production. It uses a keyring and will fail non-interactively (`no TTY available`, `GOG_KEYRING_PASSWORD` prompts).

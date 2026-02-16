@@ -3,6 +3,9 @@ set -euo pipefail
 
 CONFIG_DIR="${1:-/data/openclaw/.openclaw}"
 AGENT_ID="${2:-mo2darkbot}"
+BRIEF_PROFILE_RAW="${3:-ops}"
+BRIEF_PROFILE="$(printf '%s' "$BRIEF_PROFILE_RAW" | tr '[:upper:]' '[:lower:]')"
+AGENT_SLUG="$(printf '%s' "$AGENT_ID" | tr -c 'a-zA-Z0-9._-' '-')"
 CRON_DIR="${CONFIG_DIR}/cron"
 JOBS_FILE="${CRON_DIR}/jobs.json"
 TZ_NAME="America/Chicago"
@@ -11,6 +14,31 @@ mkdir -p "$CRON_DIR"
 if [ ! -s "$JOBS_FILE" ]; then
   printf '%s\n' '{"version":1,"jobs":[]}' > "$JOBS_FILE"
 fi
+
+case "$BRIEF_PROFILE" in
+  ops)
+    PROFILE_LABEL="Chief of Staff"
+    NAME_PREFIX="CoS BRIEF"
+    ID_PREFIX="brief-${AGENT_SLUG}-ops"
+    AM_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_OPS_AM:-30 7 * * *}"
+    MIDDAY_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_OPS_MIDDAY:-30 12 * * *}"
+    AFTERNOON_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_OPS_AFTERNOON:-30 16 * * *}"
+    EOD_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_OPS_EOD:-30 20 * * *}"
+    ;;
+  marketing)
+    PROFILE_LABEL="Chief Marketing Officer"
+    NAME_PREFIX="CMO BRIEF"
+    ID_PREFIX="brief-${AGENT_SLUG}-mkt"
+    AM_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_MKT_AM:-45 8 * * *}"
+    MIDDAY_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_MKT_MIDDAY:-45 13 * * *}"
+    AFTERNOON_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_MKT_AFTERNOON:-45 17 * * *}"
+    EOD_CRON_EXPR="${OPENCLAW_BRIEF_SCHEDULE_MKT_EOD:-45 21 * * *}"
+    ;;
+  *)
+    echo "Unsupported brief profile '${BRIEF_PROFILE_RAW}'. Use: ops | marketing" >&2
+    exit 1
+    ;;
+esac
 
 load_heredoc() {
   local var_name="$1"
@@ -113,6 +141,32 @@ Sanity checks every run
 - P0 list is <= 3 items; everything else goes to P1/P2.
 EOF
  
+if [ "$BRIEF_PROFILE" = "ops" ]; then
+  load_heredoc ROLE_GUARDRAILS <<'EOF'
+ROLE GUARDRAILS (MANDATORY)
+- Active role: Chief of Staff (operations, execution, prioritization, accountability).
+- Do not perform brand/campaign creative execution as primary work. If marketing execution is required, create a handoff task to CMO.
+- If a request is out of scope for CoS, create exactly one handoff item in SHARED_KANBAN.md and continue only with CoS-owned work.
+- Namespace discipline (same Google Workspace account): use OPS-prefixed titles/tags.
+  - Calendar summary prefix: "OPS:"
+  - Docs title prefix: "OPS_"
+  - Task tags: [OPS], [EXEC], [ADMIN]
+- Never rewrite CMO backlog items unless marked "Needs CoS unblock".
+EOF
+else
+  load_heredoc ROLE_GUARDRAILS <<'EOF'
+ROLE GUARDRAILS (MANDATORY)
+- Active role: CMO (marketing strategy, campaigns, content, narrative, growth).
+- Do not perform CoS operational ownership as primary work. If ops execution is required, create a handoff task to CoS.
+- If a request is out of scope for CMO, create exactly one handoff item in SHARED_KANBAN.md and continue only with CMO-owned work.
+- Namespace discipline (same Google Workspace account): use MKT-prefixed titles/tags.
+  - Calendar summary prefix: "MKT:"
+  - Docs title prefix: "MKT_"
+  - Task tags: [MKT], [CONTENT], [GROWTH]
+- Never rewrite CoS backlog items unless marked "Needs CMO input".
+EOF
+fi
+
 
 load_heredoc AM_VARIANT <<'EOF'
 Brief type behavior
@@ -172,8 +226,8 @@ build_prompt() {
   local horizon="$2"
   local variant="$3"
 
-  printf '%s\n\n%s\n\nRUN CONTEXT:\nBrief type: %s\nTime horizon for meetings: %s\nToday theme: pull from SHARED_KANBAN.md + SHARED_SECOND_BRAIN.md.\n\nAt the very bottom as a single line:\nSTATE_UPDATE: last_brief_timestamp=...\n' \
-    "$COMMON_PROMPT" "$variant" "$brief_type" "$horizon"
+  printf '%s\n\n%s\n\n%s\n\nRUN CONTEXT:\nProfile: %s\nAgent: %s\nBrief type: %s\nTime horizon for meetings: %s\nToday theme: pull from SHARED_KANBAN.md + SHARED_SECOND_BRAIN.md.\n\nAt the very bottom as a single line:\nSTATE_UPDATE: last_brief_timestamp=...\n' \
+    "$COMMON_PROMPT" "$ROLE_GUARDRAILS" "$variant" "$PROFILE_LABEL" "$AGENT_ID" "$brief_type" "$horizon"
 }
 
 AM_PROMPT="$(build_prompt "AM Plan" "8h" "$AM_VARIANT")"
@@ -188,23 +242,40 @@ jq \
   --argjson now "$NOW_MS" \
   --arg agent "$AGENT_ID" \
   --arg tz "$TZ_NAME" \
+  --arg id_prefix "$ID_PREFIX" \
+  --arg name_prefix "$NAME_PREFIX" \
+  --arg profile "$PROFILE_LABEL" \
+  --arg am_expr "$AM_CRON_EXPR" \
+  --arg midday_expr "$MIDDAY_CRON_EXPR" \
+  --arg afternoon_expr "$AFTERNOON_CRON_EXPR" \
+  --arg eod_expr "$EOD_CRON_EXPR" \
   --arg am "$AM_PROMPT" \
   --arg midday "$MIDDAY_PROMPT" \
   --arg afternoon "$AFTERNOON_PROMPT" \
   --arg eod "$EOD_PROMPT" \
   '
-  def brief_ids: ["brief-am-plan","brief-midday-replan","brief-afternoon-prep","brief-eod-closeout"];
-  def brief_names: [
-    "BRIEF 1 - AM Plan",
-    "BRIEF 2 - Midday Replan",
-    "BRIEF 3 - Afternoon Prep & Follow-ups",
-    "BRIEF 4 - EOD Closeout"
+  def managed_ids($prefix): [
+    ($prefix + "-am-plan"),
+    ($prefix + "-midday-replan"),
+    ($prefix + "-afternoon-prep"),
+    ($prefix + "-eod-closeout")
   ];
+  def managed_names($prefix): [
+    ($prefix + " 1 - AM Plan"),
+    ($prefix + " 2 - Midday Replan"),
+    ($prefix + " 3 - Afternoon Prep & Follow-ups"),
+    ($prefix + " 4 - EOD Closeout")
+  ];
+  def legacy_ids: ["brief-am-plan","brief-midday-replan","brief-afternoon-prep","brief-eod-closeout"];
   def legacy_names: [
     "Morning Email Briefing (7am CST)",
     "Midday Email Briefing (12pm CST)",
     "Evening Email Briefing (5pm CST)",
-    "Night Email Briefing (10pm CST)"
+    "Night Email Briefing (10pm CST)",
+    "BRIEF 1 - AM Plan",
+    "BRIEF 2 - Midday Replan",
+    "BRIEF 3 - Afternoon Prep & Follow-ups",
+    "BRIEF 4 - EOD Closeout"
   ];
   def existing_by_id($root; $id):
     (first(($root.jobs // [])[]? | select(.id == $id)) // {});
@@ -214,7 +285,7 @@ jq \
         id: $id,
         agentId: $agent,
         name: $name,
-        description: "Auto-managed daily brief cadence (America/Chicago)",
+        description: ("Auto-managed " + $profile + " daily brief cadence (America/Chicago)"),
         enabled: true,
         deleteAfterRun: false,
         createdAtMs: ($old.createdAtMs // $now),
@@ -245,18 +316,30 @@ jq \
       ($root.jobs // [])
       | map(
           select(
-            (.id as $job_id | (brief_ids | index($job_id)) == null)
+            (
+              (.id as $job_id | (managed_ids($id_prefix) | index($job_id)) == null)
+            )
             and
-            ((.name // "") as $job_name | (brief_names | index($job_name)) == null)
+            (
+              ((.id as $job_id | (legacy_ids | index($job_id)) == null) or ((.agentId // "") != $agent))
+            )
             and
-            ((.name // "") as $legacy_name | (legacy_names | index($legacy_name)) == null)
+            (
+              ((.name // "") as $job_name | (managed_names($name_prefix) | index($job_name)) == null)
+              or ((.agentId // "") != $agent)
+            )
+            and
+            (
+              ((.name // "") as $legacy_name | (legacy_names | index($legacy_name)) == null)
+              or ((.agentId // "") != $agent)
+            )
           )
         )
       + [
-          mkjob($root; "brief-am-plan"; "BRIEF 1 - AM Plan"; "30 7 * * *"; $am),
-          mkjob($root; "brief-midday-replan"; "BRIEF 2 - Midday Replan"; "30 12 * * *"; $midday),
-          mkjob($root; "brief-afternoon-prep"; "BRIEF 3 - Afternoon Prep & Follow-ups"; "30 16 * * *"; $afternoon),
-          mkjob($root; "brief-eod-closeout"; "BRIEF 4 - EOD Closeout"; "30 20 * * *"; $eod)
+          mkjob($root; ($id_prefix + "-am-plan"); ($name_prefix + " 1 - AM Plan"); $am_expr; $am),
+          mkjob($root; ($id_prefix + "-midday-replan"); ($name_prefix + " 2 - Midday Replan"); $midday_expr; $midday),
+          mkjob($root; ($id_prefix + "-afternoon-prep"); ($name_prefix + " 3 - Afternoon Prep & Follow-ups"); $afternoon_expr; $afternoon),
+          mkjob($root; ($id_prefix + "-eod-closeout"); ($name_prefix + " 4 - EOD Closeout"); $eod_expr; $eod)
         ]
     )
   ' "$JOBS_FILE" > "$TMP_FILE"
@@ -297,4 +380,5 @@ fi
 shopt -u nullglob
 
 echo "Configured daily brief cron jobs (4x/day, ${TZ_NAME}) in ${JOBS_FILE}"
+echo "Profile: ${PROFILE_LABEL} | Agent: ${AGENT_ID} | Prefix: ${ID_PREFIX}"
 echo "Backup snapshot: ${SNAPSHOT}"

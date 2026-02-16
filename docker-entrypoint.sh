@@ -401,7 +401,7 @@ seed_shared_file "KANBAN.md"
 seed_shared_file "SECOND_BRAIN.md"
 
 # Seed agent workspace files from git repo into persistent storage.
-# Only write missing/empty files so runtime edits persist.
+# Role guardrails are always refreshed; other files are only written when missing/empty.
 AGENT_SRC_DIR="/opt/openclaw-agents"
 seed_agent_workspace() {
   local agent_id="$1"
@@ -409,13 +409,20 @@ seed_agent_workspace() {
   local src
   local name
   local dest
+  local should_copy
   mkdir -p "$ws_dir"
   if [ -d "$AGENT_SRC_DIR/$agent_id" ]; then
     for src in "$AGENT_SRC_DIR/$agent_id/"*.md; do
       [ -e "$src" ] || continue
       name="$(basename "$src")"
       dest="$ws_dir/$name"
-      if [ -s "$dest" ]; then
+      should_copy="false"
+      if [ "$name" = "ROLE_GUARDRAILS.md" ]; then
+        should_copy="true"
+      elif [ ! -s "$dest" ]; then
+        should_copy="true"
+      fi
+      if [ "$should_copy" != "true" ]; then
         continue
       fi
       cp "$src" "$dest"
@@ -779,8 +786,8 @@ jq -n \
       }
     },
     "list": [
-      {"id": "mo2darkbot", "name": "@mo2darkbot", "workspace": ($config_dir + "/workspace-mo2darkbot"), "subagents": {"allowAgents": ["mo2drkbot"]}, "tools": {"profile": "full", "allow": ["llm-task"]}},
-      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "subagents": {"allowAgents": ["mo2darkbot"]}, "tools": {"profile": "full", "allow": ["llm-task"]}}
+      {"id": "mo2darkbot", "name": "@mo2darkbot", "workspace": ($config_dir + "/workspace-mo2darkbot"), "subagents": {"allowAgents": []}, "tools": {"profile": "full", "allow": ["llm-task"]}},
+      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "subagents": {"allowAgents": []}, "tools": {"profile": "full", "allow": ["llm-task"]}}
     ]
   },
   "session": {"dmScope": "per-account-channel-peer"},
@@ -864,11 +871,39 @@ chmod 600 "$CONFIG_DIR/agents/main/sessions/sessions.json" 2>/dev/null || true
 
 # Enforce the multi-brief cron cadence + output template in persistent state.
 if [ "${OPENCLAW_ENFORCE_MULTI_BRIEF_CRON:-true}" = "true" ]; then
-  BRIEF_AGENT_ID="${OPENCLAW_BRIEF_AGENT_ID:-mo2darkbot}"
-  if /usr/local/bin/configure-brief-cron "$CONFIG_DIR" "$BRIEF_AGENT_ID"; then
-    echo "Daily brief cron cadence configured for agent: ${BRIEF_AGENT_ID}"
+  if [ "${OPENCLAW_ENABLE_COS_BRIEFS:-true}" = "true" ]; then
+    if /usr/local/bin/configure-brief-cron "$CONFIG_DIR" "mo2darkbot" "ops"; then
+      echo "Daily brief cron cadence configured for CoS agent: mo2darkbot"
+    else
+      echo "WARNING: Failed to configure CoS daily brief cron cadence"
+    fi
+  fi
+  if [ "${OPENCLAW_ENABLE_CMO_BRIEFS:-true}" = "true" ]; then
+    if /usr/local/bin/configure-brief-cron "$CONFIG_DIR" "mo2drkbot" "marketing"; then
+      echo "Daily brief cron cadence configured for CMO agent: mo2drkbot"
+    else
+      echo "WARNING: Failed to configure CMO daily brief cron cadence"
+    fi
+  fi
+  if [ -n "${OPENCLAW_BRIEF_AGENT_ID:-}" ] && [ "${OPENCLAW_ENABLE_LEGACY_BRIEF_AGENT:-false}" = "true" ]; then
+    if /usr/local/bin/configure-brief-cron "$CONFIG_DIR" "${OPENCLAW_BRIEF_AGENT_ID}" "ops"; then
+      echo "Legacy brief agent cadence configured for: ${OPENCLAW_BRIEF_AGENT_ID}"
+    else
+      echo "WARNING: Failed to configure legacy brief agent cadence"
+    fi
+  fi
+  if [ "${OPENCLAW_ENABLE_COS_BRIEFS:-true}" != "true" ] && [ "${OPENCLAW_ENABLE_CMO_BRIEFS:-true}" != "true" ] && [ "${OPENCLAW_ENABLE_LEGACY_BRIEF_AGENT:-false}" != "true" ]; then
+    echo "Daily brief cron cadence skipped (all brief profiles disabled)"
+  fi
+else
+  if [ "${OPENCLAW_ENABLE_LEGACY_BRIEF_AGENT:-false}" = "true" ] && [ -n "${OPENCLAW_BRIEF_AGENT_ID:-}" ]; then
+    if /usr/local/bin/configure-brief-cron "$CONFIG_DIR" "${OPENCLAW_BRIEF_AGENT_ID}" "ops"; then
+      echo "Legacy brief cron cadence configured for agent: ${OPENCLAW_BRIEF_AGENT_ID}"
+    else
+      echo "WARNING: Failed to configure legacy brief cron cadence"
+    fi
   else
-    echo "WARNING: Failed to configure daily brief cron cadence"
+    echo "Daily brief cron cadence disabled"
   fi
 fi
 
