@@ -7,11 +7,12 @@ Requires=docker.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/openclaw/openclaw.env
+Environment=OPENCLAW_IMAGE=wrkfloopenclawacr.azurecr.io/openclaw:latest
 ExecStartPre=/usr/bin/az login --identity --allow-no-subscriptions
 ExecStartPre=/usr/bin/az acr login --name wrkfloopenclawacr
-ExecStartPre=-/usr/bin/docker pull wrkfloopenclawacr.azurecr.io/openclaw:a55bb7327d69be6e97becb123994451044c7791b
+ExecStartPre=-/usr/bin/docker pull ${OPENCLAW_IMAGE}
 ExecStartPre=-/usr/bin/docker rm -f openclaw-gateway
-ExecStart=/usr/bin/docker run --name openclaw-gateway --restart=no --env-file /etc/openclaw/openclaw.env -v /data/openclaw/.openclaw:/data/openclaw/.openclaw -p 127.0.0.1:18789:18789 wrkfloopenclawacr.azurecr.io/openclaw:a55bb7327d69be6e97becb123994451044c7791b
+ExecStart=/usr/bin/docker run --name openclaw-gateway --restart=no --env-file /etc/openclaw/openclaw.env -v /data/openclaw/.openclaw:/data/openclaw/.openclaw -p 127.0.0.1:18789:18789 ${OPENCLAW_IMAGE}
 ExecStop=/usr/bin/docker stop openclaw-gateway
 Restart=always
 RestartSec=10

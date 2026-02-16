@@ -1,4 +1,4 @@
-name: Build and Deploy to Azure
+name: Build and Deploy to Azure VM
 
 on:
   push:
@@ -21,15 +21,8 @@ concurrency:
 env:
   AZURE_CONTAINER_REGISTRY: wrkfloopenclawacr
   RESOURCE_GROUP: openclaw-rg
-  CONTAINER_APPS_ENVIRONMENT: openclaw-env
-  CONTAINER_APP_NAME: openclaw-gateway
+  VM_NAME: openclaw-gateway-vm
   CONTAINER_IMAGE: openclaw
-  # Persist OpenClaw state across revisions/redeploys (skills, telegram, workspace, logs, etc.)
-  ENV_STORAGE_NAME: openclaw-state
-  MOUNT_PATH: /data/openclaw/.openclaw
-  GATEWAY_PORT: "18789"
-  GATEWAY_BIND: lan
-  GITHUB_REPO: Wrk-Flo/openclaw-prod
   IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.imageTag || github.sha }}
 
 jobs:
@@ -45,13 +38,6 @@ jobs:
         with:
           creds: >-
             {"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}
-
-      - name: Login to ACR
-        run: |
-          az acr login \
-            --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
-            --username ${{ secrets.ACR_USERNAME }} \
-            --password ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Docker image
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skipBuild != 'true' }}
@@ -73,209 +59,55 @@ jobs:
             sleep 20
           done
 
-      - name: Deploy to Azure Container Apps (HTTPS + WebSockets)
+      - name: Update VM runtime image and restart service
         run: |
           set -euo pipefail
-          az extension add --name containerapp --upgrade
+          IMAGE_REF="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }}"
+          echo "Deploying ${IMAGE_REF} to ${{ env.VM_NAME }}"
 
-          APP_NAME="${{ env.CONTAINER_APP_NAME }}"
-          RG="${{ env.RESOURCE_GROUP }}"
-          ENV_NAME="${{ env.CONTAINER_APPS_ENVIRONMENT }}"
-          REGISTRY_SERVER="${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io"
-          IMAGE="${REGISTRY_SERVER}/${{ env.CONTAINER_IMAGE }}:${{ env.IMAGE_TAG }}"
-
-          ENV_STORAGE_NAME="${{ env.ENV_STORAGE_NAME }}"
-          MOUNT_PATH="${{ env.MOUNT_PATH }}"
-
-          # Prefer in-place update to avoid downtime and preserve mounted state.
-          if az containerapp show -g "$RG" -n "$APP_NAME" >/dev/null 2>&1; then
-            echo "Updating existing container app: $APP_NAME"
-
-            az containerapp registry set \
-              -g "$RG" -n "$APP_NAME" \
-              --server "$REGISTRY_SERVER" \
-              --username "${{ secrets.ACR_USERNAME }}" \
-              --password "${{ secrets.ACR_PASSWORD }}" >/dev/null
-
-            az containerapp secret set \
-              -g "$RG" -n "$APP_NAME" \
-              --secrets \
-                azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
-                azure-claude-api-key='${{ secrets.AZURE_CLAUDE_API_KEY }}' \
-                telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
-                telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
-                gh-token='${{ secrets.GH_TOKEN }}' \
-                google-places-api-key='${{ secrets.GOOGLE_PLACES_API_KEY }}' \
-                elevenlabs-api-key='${{ secrets.ELEVENLABS_API_KEY }}' \
-                openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
-                gmail-app-password='${{ secrets.GMAIL_APP_PASSWORD }}' \
-                slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
-                slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
-                brave-api-key='${{ secrets.BRAVE_API_KEY }}' \
-                google-oauth-client-id='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}' \
-                google-oauth-client-secret='${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}' \
-                google-oauth-refresh-token='${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}' \
-              >/dev/null
-
-            az containerapp update \
-              -g "$RG" -n "$APP_NAME" \
-              --image "$IMAGE" \
-              --command /usr/local/bin/docker-entrypoint.sh \
-              --replace-env-vars \
-                AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
-                AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
-                AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
-                AZURE_CLAUDE_ENDPOINT='${{ secrets.AZURE_CLAUDE_ENDPOINT }}' \
-                OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
-                OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
-                GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-                OPENCLAW_MEMORY_DB_PATH='/tmp/openclaw-memory-db' \
-                AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
-                AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
-                TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
-                TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
-                GH_TOKEN=secretref:gh-token \
-                GOOGLE_PLACES_API_KEY=secretref:google-places-api-key \
-                ELEVENLABS_API_KEY=secretref:elevenlabs-api-key \
-                OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
-                GMAIL_APP_PASSWORD=secretref:gmail-app-password \
-                SLACK_BOT_TOKEN=secretref:slack-bot-token \
-                SLACK_APP_TOKEN=secretref:slack-app-token \
-                BRAVE_API_KEY=secretref:brave-api-key \
-                GOOGLE_OAUTH_CLIENT_ID=secretref:google-oauth-client-id \
-                GOOGLE_OAUTH_CLIENT_SECRET=secretref:google-oauth-client-secret \
-                GOOGLE_OAUTH_REFRESH_TOKEN=secretref:google-oauth-refresh-token \
-              >/dev/null
+          REMOTE_SCRIPT=$(cat <<EOF
+          set -euo pipefail
+          ENV_FILE=/etc/openclaw/openclaw.env
+          IMAGE_REF='${IMAGE_REF}'
+          if sudo grep -q '^OPENCLAW_IMAGE=' "\${ENV_FILE}"; then
+            sudo sed -i "s|^OPENCLAW_IMAGE=.*|OPENCLAW_IMAGE=\${IMAGE_REF}|" "\${ENV_FILE}"
           else
-            echo "Creating container app: $APP_NAME"
-            az containerapp create \
-              -g "$RG" -n "$APP_NAME" \
-              --environment "$ENV_NAME" \
-              --image "$IMAGE" \
-              --command /usr/local/bin/docker-entrypoint.sh \
-              --ingress external \
-              --target-port "${{ env.GATEWAY_PORT }}" \
-              --transport auto \
-              --cpu 1.0 --memory 2.0Gi \
-              --min-replicas 1 --max-replicas 1 \
-              --registry-server "$REGISTRY_SERVER" \
-              --registry-username "${{ secrets.ACR_USERNAME }}" \
-              --registry-password "${{ secrets.ACR_PASSWORD }}" \
-              --secrets \
-                azure-openai-api-key='${{ secrets.AZURE_OPENAI_API_KEY }}' \
-                azure-claude-api-key='${{ secrets.AZURE_CLAUDE_API_KEY }}' \
-                telegram-bot-token-default='${{ secrets.TELEGRAM_BOT_TOKEN_DEFAULT }}' \
-                telegram-bot-token-mo2drkbot='${{ secrets.TELEGRAM_BOT_TOKEN_MO2DRKBOT }}' \
-                gh-token='${{ secrets.GH_TOKEN }}' \
-                google-places-api-key='${{ secrets.GOOGLE_PLACES_API_KEY }}' \
-                elevenlabs-api-key='${{ secrets.ELEVENLABS_API_KEY }}' \
-                openclaw-gateway-token='${{ secrets.OPENCLAW_GATEWAY_TOKEN }}' \
-                gmail-app-password='${{ secrets.GMAIL_APP_PASSWORD }}' \
-                slack-bot-token='${{ secrets.SLACK_BOT_TOKEN }}' \
-                slack-app-token='${{ secrets.SLACK_APP_TOKEN }}' \
-                brave-api-key='${{ secrets.BRAVE_API_KEY }}' \
-                google-oauth-client-id='${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}' \
-                google-oauth-client-secret='${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}' \
-                google-oauth-refresh-token='${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}' \
-              --env-vars \
-                AZURE_OPENAI_ENDPOINT='${{ secrets.AZURE_OPENAI_ENDPOINT }}' \
-                AZURE_OPENAI_DEPLOYMENT='${{ secrets.AZURE_OPENAI_DEPLOYMENT }}' \
-                AZURE_OPENAI_API_VERSION='${{ secrets.AZURE_OPENAI_API_VERSION }}' \
-                AZURE_CLAUDE_ENDPOINT='${{ secrets.AZURE_CLAUDE_ENDPOINT }}' \
-                OPENCLAW_GATEWAY_BIND='${{ env.GATEWAY_BIND }}' \
-                OPENCLAW_GATEWAY_PORT='${{ env.GATEWAY_PORT }}' \
-                GITHUB_REPO='${{ env.GITHUB_REPO }}' \
-                OPENCLAW_MEMORY_DB_PATH='/tmp/openclaw-memory-db' \
-                AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key \
-                AZURE_CLAUDE_API_KEY=secretref:azure-claude-api-key \
-                TELEGRAM_BOT_TOKEN_DEFAULT=secretref:telegram-bot-token-default \
-                TELEGRAM_BOT_TOKEN_MO2DRKBOT=secretref:telegram-bot-token-mo2drkbot \
-                GH_TOKEN=secretref:gh-token \
-                GOOGLE_PLACES_API_KEY=secretref:google-places-api-key \
-                ELEVENLABS_API_KEY=secretref:elevenlabs-api-key \
-                OPENCLAW_GATEWAY_TOKEN=secretref:openclaw-gateway-token \
-                GMAIL_APP_PASSWORD=secretref:gmail-app-password \
-                SLACK_BOT_TOKEN=secretref:slack-bot-token \
-                SLACK_APP_TOKEN=secretref:slack-app-token \
-                BRAVE_API_KEY=secretref:brave-api-key \
-                GOOGLE_OAUTH_CLIENT_ID=secretref:google-oauth-client-id \
-                GOOGLE_OAUTH_CLIENT_SECRET=secretref:google-oauth-client-secret \
-                GOOGLE_OAUTH_REFRESH_TOKEN=secretref:google-oauth-refresh-token \
-              >/dev/null
+            echo "OPENCLAW_IMAGE=\${IMAGE_REF}" | sudo tee -a "\${ENV_FILE}" >/dev/null
           fi
+          sudo systemctl daemon-reload
+          sudo systemctl restart openclaw-gateway.service
+          sleep 8
+          sudo systemctl is-active openclaw-gateway.service
+          EOF
+          )
 
-          # Ensure Azure Files mount is configured on the container app template.
-          # If the mount already exists, skip the PATCH. Azure can add template fields
-          # that are not accepted by the API version we PATCH with (e.g. customMetricsSettings).
-          MOUNT_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" -o json | jq --arg v "$ENV_STORAGE_NAME" --arg m "$MOUNT_PATH" '[.properties.template.containers[0].volumeMounts // [] | .[] | select(.volumeName == $v and .mountPath == $m)] | length')"
-          VOLUME_PRESENT="$(az containerapp show -g "$RG" -n "$APP_NAME" -o json | jq --arg v "$ENV_STORAGE_NAME" '[.properties.template.volumes // [] | .[] | select(.name == $v)] | length')"
-          MOUNT_PRESENT="${MOUNT_PRESENT:-0}"
-          VOLUME_PRESENT="${VOLUME_PRESENT:-0}"
+          az vm run-command invoke \
+            -g "${{ env.RESOURCE_GROUP }}" \
+            -n "${{ env.VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "$REMOTE_SCRIPT" \
+            --query 'value[0].message' -o tsv
 
-          if [ "$MOUNT_PRESENT" -ge 1 ] && [ "$VOLUME_PRESENT" -ge 1 ]; then
-            echo "Azure Files mount already present; skipping template patch."
-          else
-            echo "Azure Files mount missing; applying template patch."
-            API_VERSION="2026-01-01"
-            TEMPLATE="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.template -o json)"
-            UPDATED_TEMPLATE="$(echo "$TEMPLATE" | jq --arg storageName "$ENV_STORAGE_NAME" --arg mountPath "$MOUNT_PATH" '
-              walk(if type == "object" then del(.imageType, .customMetricsSettings) else . end) |
-              .volumes = ((.volumes // []) | map(select(.name != $storageName)) + [{"name": $storageName, "storageType": "AzureFile", "storageName": $storageName}]) |
-              .containers = (.containers | map(
-                if .name == "openclaw-gateway" then
-                  .volumeMounts = (((.volumeMounts // []) | map(select(.volumeName != $storageName))) + [{"volumeName": $storageName, "mountPath": $mountPath}])
-                else
-                  .
-                end
-              ))
-            ')"
-            az rest \
-              --method patch \
-              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.App/containerapps/$APP_NAME?api-version=${API_VERSION}" \
-              --body "$(jq -n --argjson t "$UPDATED_TEMPLATE" '{properties:{template:$t}}')" \
-              >/dev/null
-          fi
-
-          # Deactivate old revisions to prevent duplicate Telegram bot polling (409 conflicts).
-          CURRENT_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestRevisionName -o tsv)"
-          for OLD_REV in $(az containerapp revision list -g "$RG" -n "$APP_NAME" --query "[?name!='${CURRENT_REV}' && properties.active].name" -o tsv); do
-            echo "Deactivating old revision: $OLD_REV"
-            az containerapp revision deactivate -g "$RG" -n "$APP_NAME" --revision "$OLD_REV" >/dev/null || true
-          done
-
-          FQDN="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
-          echo "Container App FQDN: $FQDN"
-
-      - name: Health Check (Container Apps)
+      - name: Health Check (VM gateway)
         run: |
-          APP_NAME="${{ env.CONTAINER_APP_NAME }}"
-          RG="${{ env.RESOURCE_GROUP }}"
+          set -euo pipefail
 
-          echo "Waiting for latest revision to become ready and healthy..."
-          for i in {1..60}; do
-            LATEST_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestRevisionName -o tsv)"
-            READY_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestReadyRevisionName -o tsv)"
-            RUN_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.runningState -o tsv 2>/dev/null || true)"
-            HEALTH_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.healthState -o tsv 2>/dev/null || true)"
-            PROVISIONING_STATE="$(az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" --query properties.provisioningState -o tsv 2>/dev/null || true)"
-            echo "Attempt ${i}/60: latest=${LATEST_REV} ready=${READY_REV} running=${RUN_STATE} health=${HEALTH_STATE} provisioning=${PROVISIONING_STATE}"
-
-            if [ "$LATEST_REV" = "$READY_REV" ] && [ "$HEALTH_STATE" = "Healthy" ] && [ "$PROVISIONING_STATE" = "Provisioned" ]; then
-              case "$RUN_STATE" in
-                Running|RunningAtMaxScale)
-                  echo "Healthy revision: ${LATEST_REV}"
-                  exit 0
-                  ;;
-              esac
-            fi
-            sleep 5
-          done
-
-          echo "Timed out waiting for revision health." >&2
-          az containerapp show -g "$RG" -n "$APP_NAME" --query '{latestRevision:properties.latestRevisionName,latestReadyRevision:properties.latestReadyRevisionName,runningStatus:properties.runningStatus}' -o json || true
-          LATEST_REV="$(az containerapp show -g "$RG" -n "$APP_NAME" --query properties.latestRevisionName -o tsv 2>/dev/null || true)"
-          if [ -n "$LATEST_REV" ]; then
-            az containerapp revision show -g "$RG" -n "$APP_NAME" --revision "$LATEST_REV" -o json || true
+          REMOTE_SCRIPT=$(cat <<'EOF'
+          set -euo pipefail
+          TOKEN="$(sudo awk -F= '/^OPENCLAW_GATEWAY_TOKEN=/{print $2}' /etc/openclaw/openclaw.env | tr -d '\r\n')"
+          AUTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${TOKEN}" http://127.0.0.1:18789/__openclaw__/canvas/management.html || true)"
+          if [ "${AUTH_CODE}" != "200" ]; then
+            echo "Gateway health check failed: canvas auth code ${AUTH_CODE}" >&2
+            sudo journalctl -u openclaw-gateway.service -n 120 --no-pager || true
+            exit 1
           fi
-          az containerapp logs show -g "$RG" -n "$APP_NAME" --tail 200 || true
-          exit 1
+          echo "Gateway health check passed (canvas_auth=${AUTH_CODE})"
+          EOF
+          )
+
+          az vm run-command invoke \
+            -g "${{ env.RESOURCE_GROUP }}" \
+            -n "${{ env.VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "$REMOTE_SCRIPT" \
+            --query 'value[0].message' -o tsv

@@ -24,6 +24,7 @@ This directory contains the VM-first production topology for OpenClaw.
 3. Sync existing state into `/data/openclaw/.openclaw`.
 4. Place env vars into `/etc/openclaw/openclaw.env`.
    - For Docker hosting, set `OPENCLAW_GATEWAY_BIND=lan` so the process listens inside the container.
+   - Set `OPENCLAW_IMAGE=<acr>.azurecr.io/openclaw:<tag>` for rollout control.
    - Keep host exposure private with `-p 127.0.0.1:18789:18789` in the systemd unit.
 5. Install and start `openclaw-gateway.service`.
 6. Enable archive timer and configure Tailscale.
