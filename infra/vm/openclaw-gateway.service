@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenClaw Gateway (Docker)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/openclaw/openclaw.env
+ExecStartPre=/usr/bin/az login --identity --allow-no-subscriptions
+ExecStartPre=/usr/bin/az acr login --name wrkfloopenclawacr
+ExecStartPre=-/usr/bin/docker pull wrkfloopenclawacr.azurecr.io/openclaw:a55bb7327d69be6e97becb123994451044c7791b
+ExecStartPre=-/usr/bin/docker rm -f openclaw-gateway
+ExecStart=/usr/bin/docker run --name openclaw-gateway --restart=no --env-file /etc/openclaw/openclaw.env -v /data/openclaw/.openclaw:/data/openclaw/.openclaw -p 127.0.0.1:18789:18789 wrkfloopenclawacr.azurecr.io/openclaw:a55bb7327d69be6e97becb123994451044c7791b
+ExecStop=/usr/bin/docker stop openclaw-gateway
+Restart=always
+RestartSec=10
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

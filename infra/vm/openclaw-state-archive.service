@@ -1,0 +1,8 @@
+[Unit]
+Description=Archive OpenClaw state to Azure Blob
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openclaw-state-archive.sh

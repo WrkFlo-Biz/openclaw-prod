@@ -1,0 +1,53 @@
+name: VM Nightly Backup
+
+on:
+  schedule:
+    - cron: '25 3 * * *'
+  workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: openclaw-rg
+  SOURCE_DISK: openclaw-gateway-vm-data
+  SNAPSHOT_PREFIX: openclaw-gateway-vm-data-snap
+  RETAIN_DAYS: '14'
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: >-
+            {"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}
+
+      - name: Create managed disk snapshot
+        run: |
+          set -euo pipefail
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          SNAP_NAME="${SNAPSHOT_PREFIX}-${TS}"
+          DISK_ID="$(az disk show -g "$RESOURCE_GROUP" -n "$SOURCE_DISK" --query id -o tsv)"
+          az snapshot create \
+            -g "$RESOURCE_GROUP" \
+            -n "$SNAP_NAME" \
+            --source "$DISK_ID" \
+            --sku Standard_LRS \
+            --only-show-errors \
+            -o none
+          echo "Created snapshot: $SNAP_NAME"
+
+      - name: Prune old snapshots
+        run: |
+          set -euo pipefail
+          CUTOFF="$(date -u -d "-${RETAIN_DAYS} days" +%s)"
+          az snapshot list -g "$RESOURCE_GROUP" \
+            --query "[?starts_with(name, '${SNAPSHOT_PREFIX}-')].[name,timeCreated]" -o tsv \
+            | while IFS=$'\t' read -r name created; do
+                [ -z "$name" ] && continue
+                created_epoch="$(date -u -d "$created" +%s)"
+                if [ "$created_epoch" -lt "$CUTOFF" ]; then
+                  echo "Deleting old snapshot: $name"
+                  az snapshot delete -g "$RESOURCE_GROUP" -n "$name" --only-show-errors
+                fi
+              done
