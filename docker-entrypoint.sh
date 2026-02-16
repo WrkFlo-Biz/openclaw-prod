@@ -804,6 +804,11 @@ jq -n \
     "port": $gw_port,
     "mode": "local",
     "bind": $gw_bind,
+    "controlUi": {
+      "enabled": true,
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true
+    },
     "trustedProxies": [
       "127.0.0.1",
       "::1",
@@ -814,7 +819,7 @@ jq -n \
       "100.100.0.197",
       "100.100.194.25"
     ],
-    "auth": {"mode": "token", "token": $gw_token}
+    "auth": {"mode": "token", "token": $gw_token, "allowTailscale": true}
   },
   "browser": {
     "enabled": true,
