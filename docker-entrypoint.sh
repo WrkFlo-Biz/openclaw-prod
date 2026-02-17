@@ -445,31 +445,28 @@ seed_agent_workspace() {
 seed_agent_workspace "mo2darkbot"
 seed_agent_workspace "mo2drkbot"
 
-# Configure mcporter with gmail-mcp-imap + workspace-mcp credentials.
+# Configure mcporter with a single Google Workspace full server (workspace-mcp).
 # Write to all locations mcporter/openclaw might look for config.
+# Keep optional app-password normalization for himalaya and any legacy tools.
 if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
-  # Normalize app passwords copied with spaces (Google shows them grouped).
   GMAIL_APP_PASSWORD="${GMAIL_APP_PASSWORD//[[:space:]]/}"
   export GMAIL_APP_PASSWORD
+fi
 
-  # Allow overriding the Gmail address; default to the bot mailbox.
-  GMAIL_EMAIL="${GMAIL_EMAIL:-mo2darkbot@gmail.com}"
-  export GMAIL_EMAIL
-  # OAuth refresh tokens are sometimes copied with whitespace/newlines.
-  GOOGLE_OAUTH_REFRESH_TOKEN="${GOOGLE_OAUTH_REFRESH_TOKEN//[[:space:]]/}"
-  export GOOGLE_OAUTH_REFRESH_TOKEN
-  WS_MCP_CREDENTIALS_DIR="$CONFIG_DIR/credentials/workspace-mcp"
-  export WS_MCP_CREDENTIALS_DIR
+# Allow overriding the Gmail address; default to the bot mailbox.
+GMAIL_EMAIL="${GMAIL_EMAIL:-mo2darkbot@gmail.com}"
+export GMAIL_EMAIL
+# OAuth refresh tokens are sometimes copied with whitespace/newlines.
+GOOGLE_OAUTH_REFRESH_TOKEN="${GOOGLE_OAUTH_REFRESH_TOKEN:-}"
+GOOGLE_OAUTH_REFRESH_TOKEN="${GOOGLE_OAUTH_REFRESH_TOKEN//[[:space:]]/}"
+export GOOGLE_OAUTH_REFRESH_TOKEN
+WS_MCP_CREDENTIALS_DIR="$CONFIG_DIR/credentials/workspace-mcp"
+export WS_MCP_CREDENTIALS_DIR
 
-  if [ "${#GMAIL_APP_PASSWORD}" -ne 16 ]; then
-    echo "WARNING: GMAIL_APP_PASSWORD length is ${#GMAIL_APP_PASSWORD} (expected 16 for Google App Password)."
-  fi
-
-  mkdir -p "$HOME/.mcporter" "$CONFIG_DIR/config" "$WS_MCP_CREDENTIALS_DIR"
-  chmod 700 "$WS_MCP_CREDENTIALS_DIR" 2>/dev/null || true
-  sed -e "s|\${GMAIL_APP_PASSWORD}|${GMAIL_APP_PASSWORD}|g" \
-      -e "s|mo2dark@gmail.com|${GMAIL_EMAIL}|g" \
-      /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
+mkdir -p "$HOME/.mcporter" "$CONFIG_DIR/config" "$WS_MCP_CREDENTIALS_DIR"
+chmod 700 "$WS_MCP_CREDENTIALS_DIR" 2>/dev/null || true
+sed -e "s|mo2dark@gmail.com|${GMAIL_EMAIL}|g" \
+    /opt/mcporter-config.json > "$HOME/.mcporter/config.json"
 
   # Ensure workspace-mcp receives correct credential dir + user email.
   # OAuth secrets are intentionally NOT injected into the MCP env because:
@@ -566,18 +563,15 @@ if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then
     echo "workspace-mcp OAuth secrets missing and no cached credential file found; calendar/docs may require interactive auth"
   fi
 
-  cp "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json"
-  cp "$HOME/.mcporter/config.json" "$CONFIG_DIR/config/mcporter.json"
-  chmod 600 "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json" \
-            "$CONFIG_DIR/config/mcporter.json" 2>/dev/null || true
-  echo "mcporter gmail-mcp-imap configured for ${GMAIL_EMAIL} (app password)"
+cp "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json"
+cp "$HOME/.mcporter/config.json" "$CONFIG_DIR/config/mcporter.json"
+chmod 600 "$HOME/.mcporter/config.json" "$HOME/.mcporter/mcporter.json" \
+          "$CONFIG_DIR/config/mcporter.json" 2>/dev/null || true
+echo "mcporter google-workspace-api (full) configured for ${GMAIL_EMAIL}"
 
-  # workspace-mcp should use the on-disk credential cache; avoid leaking OAuth secrets into
-  # runtime env where they might override cached credentials.
-  unset GOOGLE_OAUTH_REFRESH_TOKEN GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET
-else
-  echo "GMAIL_APP_PASSWORD not set — skipping mcporter gmail config"
-fi
+# workspace-mcp should use the on-disk credential cache; avoid leaking OAuth secrets into
+# runtime env where they might override cached credentials.
+unset GOOGLE_OAUTH_REFRESH_TOKEN GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET
 
 # Configure himalaya email client
 if [ -n "${GMAIL_APP_PASSWORD:-}" ]; then

@@ -3,7 +3,7 @@
 
 ## OpenClaw Production (Cloud) Tool Routing
 
-These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in production.
+These bots run with an Azure VM gateway. Use `mcporter` for Google Workspace in production.
 
 ### Role Boundary (CMO)
 
@@ -17,7 +17,8 @@ These bots run in Azure Container Apps. Use `mcporter` for Google Workspace in p
 ### Hard Rules (Avoid Dead Ends)
 
 - Do not run `gog` in production. It uses a keyring and will fail non-interactively (`no TTY available`, `GOG_KEYRING_PASSWORD` prompts).
-- Do not call Calendar/Docs tools on `google-workspace.*` (that server is Gmail IMAP only). Use `google-workspace-api.*`.
+- Use `google-workspace-api.*` for Gmail + Calendar + Drive + Docs (single full server).
+- Do not use legacy `google-workspace.*` commands.
 - Do not use paired/local Mac node execution for Calendar/Docs in production. If you see `gateway closed (1008): pairing required`, reroute immediately to cloud tools.
 - Do not stop to ask method-selection questions when a safe fallback exists.
 - Fallback order for Calendar: `google-workspace-api.create_event` -> retry with schema-corrected args -> send `.ics` invite by email.
@@ -53,10 +54,10 @@ mcporter call --config "$MCPO" <server>.<tool> --args '<json>' --output json
 
 ### Which Server To Use
 
-- Email (IMAP, app password, stable): `google-workspace.*`
-  - Example tools: `get_primary_emails`, `get_updates_emails`, `get_email_content`, `send_email`
-- Google Workspace APIs (Calendar/Drive/Docs): `google-workspace-api.*`
-  - Example tools: `create_event` (Calendar), plus Drive/Docs tools exposed by `workspace-mcp`
+- Google Workspace full (Gmail/Calendar/Drive/Docs): `google-workspace-api.*`
+  - Gmail examples: `search_gmail_messages`, `get_gmail_message_content`, `send_gmail_message`
+  - Calendar examples: `list_calendars`, `create_event`
+  - Docs/Drive examples: `create_doc`, `modify_doc_text`, `search_drive_files`
 
 ### Examples
 
@@ -64,9 +65,9 @@ mcporter call --config "$MCPO" <server>.<tool> --args '<json>' --output json
 MCPO=/data/openclaw/.openclaw/config/mcporter.json
 GUSER=mo2darkbot@gmail.com
 
-# Email: get latest messages
-mcporter call --config "$MCPO" google-workspace.get_primary_emails \
-  --args '{"limit":25}' --output json
+# Email: search latest inbox messages
+mcporter call --config "$MCPO" google-workspace-api.search_gmail_messages \
+  --args "{\"user_google_email\":\"${GUSER}\",\"query\":\"in:inbox newer_than:3d\"}" --output json
 
 # Calendar: list calendars (many workspace-mcp tools require user_google_email)
 mcporter call --config "$MCPO" google-workspace-api.list_calendars \

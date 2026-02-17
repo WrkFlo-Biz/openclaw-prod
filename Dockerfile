@@ -26,7 +26,6 @@ RUN apt-get update \
        @google/gemini-cli \
        @openai/codex \
        clawhub \
-       gmail-mcp-imap \
        mcporter \
        openclaw@latest \
        pnpm \

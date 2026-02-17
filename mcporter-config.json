@@ -1,13 +1,5 @@
 {
   "mcpServers": {
-    "google-workspace": {
-      "command": "npx",
-      "args": ["-y", "gmail-mcp-imap"],
-      "env": {
-        "GMAIL_EMAIL": "mo2dark@gmail.com",
-        "GMAIL_APP_PASSWORD": "${GMAIL_APP_PASSWORD}"
-      }
-    },
     "google-workspace-api": {
       "command": "workspace-mcp",
       "args": [
