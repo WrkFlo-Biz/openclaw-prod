@@ -786,8 +786,8 @@ jq -n \
       }
     },
     "list": [
-      {"id": "mo2darkbot", "name": "@mo2darkbot", "workspace": ($config_dir + "/workspace-mo2darkbot"), "subagents": {"allowAgents": []}, "tools": {"profile": "full", "allow": ["llm-task"]}},
-      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "subagents": {"allowAgents": []}, "tools": {"profile": "full", "allow": ["llm-task"]}}
+      {"id": "mo2darkbot", "name": "@mo2darkbot", "workspace": ($config_dir + "/workspace-mo2darkbot"), "subagents": {"allowAgents": ["mo2drkbot"]}, "tools": {"profile": "full", "allow": ["llm-task"]}},
+      {"id": "mo2drkbot", "name": "@mo2drkbot", "workspace": ($config_dir + "/workspace-mo2drkbot"), "subagents": {"allowAgents": ["mo2darkbot"]}, "tools": {"profile": "full", "allow": ["llm-task"]}}
     ]
   },
   "session": {"dmScope": "per-account-channel-peer"},
