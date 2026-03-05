@@ -174,50 +174,97 @@ az vm run-command invoke --resource-group openclaw-rg --name openclaw-gateway-vm
 az snapshot list --resource-group openclaw-rg --query "[?contains(name,'openclaw')].{name:name,created:timeCreated}" -o table
 ```
 
+### Quick Status Commands (run on VM via az vm run-command)
+```bash
+GS=/opt/global-sentinel
+
+# /status — Full system status (text or telegram format)
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/sentinel_status.py --repo-root $GS --command status --format telegram"
+
+# /scorecard — Latest scorecard with component breakdown
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/sentinel_status.py --repo-root $GS --command scorecard --format telegram"
+
+# /graduation — Shadow-to-paper graduation progress
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/sentinel_status.py --repo-root $GS --command graduation --format telegram"
+
+# /dashboard — Dashboard URL
+# http://20.124.180.8:8501
+```
+
 ### Sentinel Monitoring Commands (run on VM via az vm run-command)
 ```bash
+GS=/opt/global-sentinel
+
 # System health
 az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
-  --scripts "cd /data/openclaw/global-sentinel && python3 scripts/healthcheck.py"
+  --scripts "systemctl status global-sentinel global-sentinel-dashboard --no-pager"
 
-# Current mode
+# Current mode + controls
 az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
-  --scripts "cat /data/openclaw/global-sentinel/control/manual_veto.json; cat /data/openclaw/global-sentinel/control/kill_switch.json"
+  --scripts "cat $GS/logs/heartbeat.json; cat $GS/control/manual_veto.json; cat $GS/control/kill_switch.json"
 
-# Latest scorecard
+# Latest scorecard (raw JSON)
 az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
-  --scripts "cat /data/openclaw/global-sentinel/reports/weekly/scorecard_latest.json"
+  --scripts "ls -t $GS/logs/scorecards/scorecard_*.json | head -1 | xargs cat"
 
-# Execution reliability
+# Execution reliability metrics
 az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
-  --scripts "cd /data/openclaw/global-sentinel && python3 src/execution/execution_reliability_metrics.py"
+  --scripts "cd $GS && python3 src/execution/execution_reliability_metrics.py"
 
 # Stale intent sweep
 az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
-  --scripts "cd /data/openclaw/global-sentinel && python3 src/execution/stale_intent_sweeper.py --stale-after-minutes 30"
+  --scripts "cd $GS && python3 src/execution/stale_intent_sweeper.py --stale-after-minutes 30"
+
+# Graduation criteria check
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/check_graduation_criteria.py --repo-root $GS"
+
+# View recent alerts
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "tail -20 $GS/logs/events/alerts.jsonl 2>/dev/null || echo 'No alerts yet'"
+
+# Service logs (last 50 lines)
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "journalctl -u global-sentinel --no-pager -n 50"
 ```
 
 ### Sentinel Architecture Reference
 ```
-src/
-  crisis_monitor.py          # Main 24/7 loop (NORMAL/ELEVATED/CRISIS/MANUAL_REVIEW)
-  execution/
-    order_intent_registry.py  # Intent tracking (draft->submitted->filled/rejected)
-    shadow_order_router.py    # Routes packages to broker adapters (shadow mode)
-    stale_intent_sweeper.py   # Cleans orphaned intents
-    time_window_ttl_policy.py # Per-window TTL rules
-    broker_state_reconciler_loop.py  # Reconciles broker state
-  risk/
-    square_root_impact_gate.py  # Econophysics: I(Q) = Y*sigma*sqrt(Q/V)
-    local_risk_mcp.py           # Risk gate evaluation
-  alpha/                        # Signal generation
-  ingest/                       # Data pipelines (FRED, EIA, Finnhub)
-  macro/                        # Fed/CPI/jobs/monetary policy
-config/
-  thresholds.yaml, assets_watchlist.yaml, execution_reliability.yaml
-control/
-  manual_veto.json, kill_switch.json
+/opt/global-sentinel/                    # VM deployment root
+  src/
+    monitoring/crisis_monitor.py         # Main 24/7 loop (NORMAL/ELEVATED/CRISIS/MANUAL_REVIEW)
+    monitoring/alerting.py               # Telegram + Slack + log alerts
+    scoring/regime_shift.py              # 8-component weighted regime scorer
+    bridges/                             # Data bridges (Yahoo, FRED, Finnhub, GDELT, EIA, Aviation)
+    execution/
+      shadow_order_router.py             # Routes packages to broker adapters
+      alpaca_paper_adapter.py            # Alpaca paper trading ($100K account)
+      order_intent_registry.py           # Intent tracking (draft->submitted->filled/rejected)
+      broker_state_reconciler_loop.py    # Reconciles broker state
+    risk/
+      square_root_impact_gate.py         # Econophysics: I(Q) = Y*sigma*sqrt(Q/V)
+      var_gate.py                        # VaR-based position sizing
+  scripts/ops/
+    sentinel_status.py                   # Bot-friendly status reporter (/status, /scorecard, /graduation)
+    check_graduation_criteria.py         # Shadow-to-paper graduation checker
+    historical_backtest.py               # Crisis scenario backtester
+  dashboard/
+    api/server.py                        # FastAPI dashboard (port 8501)
+    frontend/                            # Next.js + Tailwind + Recharts
+  config/
+    thresholds.yaml, assets_watchlist.yaml, execution_reliability.yaml
+  control/
+    manual_veto.json, kill_switch.json
 ```
+
+### Dashboard Access
+- **URL**: http://20.124.180.8:8501
+- **API Docs**: http://20.124.180.8:8501/docs (Swagger UI)
+- Real-time regime probability, component scores, bridge health, order flow, alerts
+- WebSocket auto-updates on new scorecards
 
 ### Subagent Spawning for Sentinel Tasks
 When Moses asks about sentinel status or trading operations, spawn focused subagents:
