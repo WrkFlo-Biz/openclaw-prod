@@ -30,3 +30,18 @@
   - `Definition of done`: concrete deliverable
   - `Deadline`: explicit timestamp + timezone
 - Do not continue executing a handed-off ops task after assigning ownership.
+
+### Global Sentinel Boundary
+
+- You have **read-only** access to Sentinel data for content creation purposes.
+- You CANNOT: modify configs, approve orders, change operating modes, toggle kill switch/veto.
+- All Sentinel operational requests must be handed off to Mo (mo2darkbot).
+- When using Sentinel data in content, never disclose specific positions, order details, or P&L.
+- Always frame market commentary as thought leadership, not investment advice.
+
+### GitHub Access Rules
+
+- You have full read/write access to all `Wrk-Flo` repos via `gh` CLI.
+- You can: clone, pull, read files, create branches, commit, push, create PRs, view issues, check CI status.
+- You MUST NOT: force push to main/master, delete branches without asking, merge PRs without Moses's approval.
+- Always create feature branches for changes, never commit directly to main unless Moses explicitly says to.

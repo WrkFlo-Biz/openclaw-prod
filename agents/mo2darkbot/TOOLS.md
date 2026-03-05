@@ -89,7 +89,7 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 # so you pass the required args for the specific tool.
 ```
 
-### CATEGORY 1: COMMUNICATION
+## CATEGORY 1: COMMUNICATION
 
 - **Email** (Send, draft, schedule, search, summarize)
 - **Calendar** (Create/edit events, find availability, optimize scheduling)
@@ -97,7 +97,7 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **LinkedIn** (Post drafting, connection management, message outreach)
 - **SMS** (Urgent notifications, quick reminders)
 
-### CATEGORY 2: PRODUCTIVITY
+## CATEGORY 2: PRODUCTIVITY
 
 - **Task management** (Create, prioritize, track, delegate)
 - **Note-taking** (Capture ideas, organize knowledge)
@@ -105,7 +105,7 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **File management** (Search, organize, archive)
 - **Time tracking** (Activity logging, time analysis)
 
-### CATEGORY 3: BUSINESS INTELLIGENCE
+## CATEGORY 3: BUSINESS INTELLIGENCE
 
 - **CRM** (Client tracking, pipeline management)
 - **Financial dashboards** (MRR, burn rate, projections)
@@ -113,7 +113,7 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **Fundraising tracker** (Investor pipeline, deal room)
 - **Competitive monitoring** (Track competitor moves)
 
-### CATEGORY 4: DEVELOPMENT
+## CATEGORY 4: DEVELOPMENT
 
 - **GitHub** (Code review, issue tracking, PR management)
 - **Project management** (Sprint planning, roadmap tracking)
@@ -121,7 +121,7 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **Testing/QA** (Bug tracking, test results)
 - **Deployment** (Status monitoring, rollback triggers)
 
-### CATEGORY 5: RESEARCH & LEARNING
+## CATEGORY 5: RESEARCH & LEARNING
 
 - **Web search** (Market research, competitive intel)
 - **Academic databases** (Technical papers, research)
@@ -129,7 +129,7 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **Social listening** (Brand mentions, customer feedback)
 - **Knowledge synthesis** (Summarize, connect dots)
 
-### CATEGORY 6: PERSONAL
+## CATEGORY 6: PERSONAL
 
 - **Health tracking** (Sleep, exercise, vitals)
 - **Finance** (Personal budget, expenses)
@@ -137,13 +137,95 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **Travel** (Bookings, itineraries)
 - **Relationships** (Contact reminders, gift ideas)
 
-### CATEGORY 7: AUTOMATION
+## CATEGORY 7: AUTOMATION
 
 - **Wrk.Flo platform access** (Dogfood own product)
 - **Zapier/Make** (Workflow automation)
 - **API integrations** (Custom connections)
 - **Scripting** (Python/JS for custom tasks)
 - **AI models** (Ollama local, Claude API, GPT-4)
+
+## CATEGORY 8: GLOBAL SENTINEL OPS
+
+**Purpose**: Monitor and control the Global Sentinel V5 trading intelligence system
+
+### GitHub Repo Access
+```bash
+# Clone/pull latest
+gh repo clone Wrk-Flo/global-sentinel /tmp/global-sentinel 2>/dev/null || git -C /tmp/global-sentinel pull
+
+# Check CI status
+gh run list --repo Wrk-Flo/global-sentinel --limit 5
+
+# View recent commits
+gh api repos/Wrk-Flo/global-sentinel/commits --jq '.[0:5][] | "\(.sha[0:8]) \(.commit.message | split("\n")[0])"'
+```
+
+### Azure VM Operations
+```bash
+# VM status
+az vm show --name openclaw-gateway-vm --resource-group openclaw-rg -d --query "{powerState:powerState, publicIps:publicIps}" -o json
+
+# Run command on VM (no SSH needed)
+az vm run-command invoke --resource-group openclaw-rg --name openclaw-gateway-vm \
+  --command-id RunShellScript --scripts "python3 /path/to/script.py"
+
+# Check disk snapshots
+az snapshot list --resource-group openclaw-rg --query "[?contains(name,'openclaw')].{name:name,created:timeCreated}" -o table
+```
+
+### Sentinel Monitoring Commands (run on VM via az vm run-command)
+```bash
+# System health
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd /data/openclaw/global-sentinel && python3 scripts/healthcheck.py"
+
+# Current mode
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cat /data/openclaw/global-sentinel/control/manual_veto.json; cat /data/openclaw/global-sentinel/control/kill_switch.json"
+
+# Latest scorecard
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cat /data/openclaw/global-sentinel/reports/weekly/scorecard_latest.json"
+
+# Execution reliability
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd /data/openclaw/global-sentinel && python3 src/execution/execution_reliability_metrics.py"
+
+# Stale intent sweep
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd /data/openclaw/global-sentinel && python3 src/execution/stale_intent_sweeper.py --stale-after-minutes 30"
+```
+
+### Sentinel Architecture Reference
+```
+src/
+  crisis_monitor.py          # Main 24/7 loop (NORMAL/ELEVATED/CRISIS/MANUAL_REVIEW)
+  execution/
+    order_intent_registry.py  # Intent tracking (draft->submitted->filled/rejected)
+    shadow_order_router.py    # Routes packages to broker adapters (shadow mode)
+    stale_intent_sweeper.py   # Cleans orphaned intents
+    time_window_ttl_policy.py # Per-window TTL rules
+    broker_state_reconciler_loop.py  # Reconciles broker state
+  risk/
+    square_root_impact_gate.py  # Econophysics: I(Q) = Y*sigma*sqrt(Q/V)
+    local_risk_mcp.py           # Risk gate evaluation
+  alpha/                        # Signal generation
+  ingest/                       # Data pipelines (FRED, EIA, Finnhub)
+  macro/                        # Fed/CPI/jobs/monetary policy
+config/
+  thresholds.yaml, assets_watchlist.yaml, execution_reliability.yaml
+control/
+  manual_veto.json, kill_switch.json
+```
+
+### Subagent Spawning for Sentinel Tasks
+When Moses asks about sentinel status or trading operations, spawn focused subagents:
+- `sentinel-health`: Run healthcheck, report mode, freshness, risk gate status
+- `sentinel-exec`: Check execution metrics, bound attempts, rejections, fills
+- `sentinel-replay`: Run smoke tests for a specific scenario
+- `sentinel-sweep`: Run stale intent sweep, report orphaned orders
+- `sentinel-infra`: Check VM health, disk space, snapshot status, ACR images
 
 ## Tool Usage Principles
 

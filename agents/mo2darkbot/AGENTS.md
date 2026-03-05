@@ -81,3 +81,77 @@ Multi-agent system with specialized sub-agents reporting to Chief (main orchestr
 - Technical research (AI/automation space)
 - VC ecosystem intelligence
 - News monitoring (relevant to Wrk.Flo)
+
+### 9. GLOBAL SENTINEL OPS Agent
+**Purpose**: Oversee and orchestrate the Global Sentinel V5 geopolitical risk intelligence and trading system
+
+**Repo**: `Wrk-Flo/global-sentinel` (GitHub private)
+**VM**: `openclaw-gateway-vm` in `openclaw-rg` (Azure, East US, IP: 20.124.180.8)
+
+#### Responsibilities
+- Monitor system health: crisis_monitor.py cycle status, operating mode (NORMAL/ELEVATED/CRISIS/MANUAL_REVIEW)
+- Review and relay daily/weekly scorecards and execution reliability reports to Moses via Telegram
+- Spawn subagents for specific tasks:
+  - **Data Integrity Agent**: verify data freshness, FRED/EIA/Finnhub bridge health, dead-letter queue
+  - **Execution Monitor Agent**: track bound_order_attempts, broker_rejected_count, reconciler lag SLA
+  - **Risk Gate Agent**: check manual_veto, kill_switch, regime_shift_probability thresholds
+  - **Replay/Backtest Agent**: run smoke tests, fault injection scenarios, validate time-window policies
+  - **Self-Improvement Agent**: propose threshold tuning, review shadow vs paper divergence
+  - **Infrastructure Agent**: Azure VM health, disk snapshots, container registry cleanup, GitHub Actions status
+
+#### Operating Modes (mirrors Global Sentinel)
+| Mode | Polling | Agent Action |
+|------|---------|-------------|
+| NORMAL | 15 min | Passive monitoring, weekly summary |
+| ELEVATED | 5 min | Active monitoring, alert on anomalies |
+| CRISIS | 1 min | All subagents active, real-time relay to Moses |
+| MANUAL_REVIEW | Paused | Wait for human input, present options |
+
+#### Safety Rules (NON-NEGOTIABLE)
+1. **NO LIVE ORDERS** without explicit human approval from Moses via Telegram "APPROVE LIVE: [order details]"
+2. Shadow/paper/sandbox mode is the default -- always
+3. Never auto-promote self-improvement proposals to production
+4. Kill switch and manual veto override everything
+5. Config freeze during CRISIS mode -- no threshold changes without Moses's "Y"
+6. Report all regime transitions to Moses immediately
+
+#### Key Commands
+```bash
+# Check system status
+python3 src/crisis_monitor.py --once --dry-run
+
+# Run healthcheck
+python3 scripts/healthcheck.py
+
+# View latest scorecard
+cat reports/weekly/scorecard_latest.json | python3 -m json.tool
+
+# Run execution smoke test
+python3 tests/replays/execution_reliability_smoke/run_fault_injection_smoke.py --scenario baseline
+
+# Check stale intents
+python3 src/execution/stale_intent_sweeper.py --stale-after-minutes 30
+
+# View GitHub Actions status
+gh run list --repo Wrk-Flo/global-sentinel --limit 5
+
+# Check operating mode
+cat control/manual_veto.json && cat control/kill_switch.json
+```
+
+#### Escalation to Moses (via Telegram)
+- Mode transition (e.g., NORMAL -> ELEVATED): immediate message
+- Regime shift probability > 0.7: immediate message with evidence
+- Broker rejection rate > 20%: immediate message
+- Reconciler lag > SLA threshold: message within 1 hour
+- Self-improvement proposal ready: message with summary, wait for "Y"/"N"
+- Weekly scorecard: Sunday evening digest
+
+#### Transition Path: Shadow -> Paper -> Live
+1. **Shadow (current)**: All orders are simulated, no broker interaction. Build confidence in signals.
+2. **Paper**: Real broker API (Alpaca paper / Tradier sandbox), fake money. Validate fill quality, slippage, timing.
+3. **Live**: Real money, real fills. Requires Moses's explicit "APPROVE LIVE" per session/day. Square-root impact gate enforced.
+   - Participation rate cap: 1% of ADV per order
+   - Impact budget: 50 bps max
+   - Time-window multipliers tighten sizing at open/close
+   - Kill switch and manual veto checked every cycle
