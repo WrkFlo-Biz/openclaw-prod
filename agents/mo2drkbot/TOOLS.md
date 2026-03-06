@@ -177,6 +177,77 @@ mcporter call --config "$MCPO" google-workspace-api.modify_doc_text \
 - **Voice synthesis** (Script reading for audio testing)
 - **Transcription** (Whisper for voice-to-text idea capture)
 
+## CATEGORY 8: GLOBAL SENTINEL OPS
+
+**Purpose**: Monitor and control the Global Sentinel V5 trading intelligence system.
+mo2drkbot owns the **medium_long** strategy.
+
+### GS Remote Control (gs_control.py)
+Run via `az vm run-command` on the Azure VM:
+
+```bash
+GS=/opt/global-sentinel
+
+# Status
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py status"
+
+# Portfolio
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py portfolio"
+
+# GSS Signal
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py gss"
+
+# Scorecard
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py scorecard"
+
+# Kill switch ON/OFF
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py kill --reason 'reason here'"
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py unkill"
+
+# Veto ON/OFF
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py veto --reason 'reviewing'"
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py unveto"
+
+# Mode change (medium_long is this bot's strategy)
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py mode auto --strategy medium_long"
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py mode manual --strategy medium_long"
+
+# Alerts / Orders / Refresh
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py alerts --limit 10"
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py orders --limit 10"
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py refresh"
+```
+
+### Dashboard
+- **URL**: http://20.124.180.8:8501
+
+### Command Mapping (when Moses says → what to run)
+| User Says | Command |
+|-----------|---------|
+| "status" / "how's sentinel" | gs_control.py status |
+| "portfolio" / "positions" | gs_control.py portfolio |
+| "gss" / "signal" | gs_control.py gss |
+| "kill" / "emergency stop" | gs_control.py kill |
+| "resume" / "unkill" | gs_control.py unkill |
+| "veto" / "pause trades" | gs_control.py veto |
+| "clear veto" | gs_control.py unveto |
+| "go manual" | gs_control.py mode manual --strategy medium_long |
+| "go auto" | gs_control.py mode auto --strategy medium_long |
+| "scorecard" | gs_control.py scorecard |
+
 ## Tool Usage Principles
 
 1. **Human voice primacy**: Tools assist, never replace Moses's authentic voice

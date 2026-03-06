@@ -266,6 +266,115 @@ az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunS
 - Real-time regime probability, component scores, bridge health, order flow, alerts
 - WebSocket auto-updates on new scorecards
 
+### GS Remote Control (gs_control.py)
+**Primary control method.** Use this for ALL Sentinel commands from Moses.
+Run via `az vm run-command` on the Azure VM:
+
+```bash
+GS=/opt/global-sentinel
+
+# Status — full system overview (mode, regime P, kill switch, veto, execution mode)
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py status"
+
+# Portfolio — equity, cash, positions with P&L
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py portfolio"
+
+# GSS Signal — current econophysics signal (BLACK_SWAN_SHIELD, NEUTRAL, etc.)
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py gss"
+
+# Scorecard — latest regime scorecard with component breakdown
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py scorecard"
+
+# Kill Switch — EMERGENCY: halt ALL activity
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py kill --reason 'reason here'"
+
+# Unkill — resume after kill switch
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py unkill"
+
+# Veto — halt shadow draft generation
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py veto --reason 'reviewing positions'"
+
+# Unveto — clear veto
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py unveto"
+
+# Mode change — switch day_trade or medium_long to auto/manual
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py mode auto --strategy day_trade"
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py mode manual --strategy medium_long"
+
+# Alerts — recent system alerts
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py alerts --limit 10"
+
+# Orders — recent execution events
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py orders --limit 10"
+
+# Refresh — force re-poll of consciousness, politician alpha, scorecard data
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "cd $GS && python3 scripts/ops/gs_control.py refresh"
+
+# Restart service (if system is stuck)
+az vm run-command invoke -g openclaw-rg -n openclaw-gateway-vm --command-id RunShellScript \
+  --scripts "sudo systemctl restart global-sentinel && sleep 2 && systemctl is-active global-sentinel"
+```
+
+### GS Dashboard API (Direct HTTP)
+For faster responses, the bots can also call the dashboard API directly:
+```bash
+# Status
+curl -s http://20.124.180.8:8501/api/control/status | python3 -m json.tool
+
+# Kill switch ON
+curl -s -X POST http://20.124.180.8:8501/api/control/kill-switch \
+  -H "Content-Type: application/json" -d '{"active": true, "reason": "emergency"}'
+
+# Kill switch OFF
+curl -s -X POST http://20.124.180.8:8501/api/control/kill-switch \
+  -H "Content-Type: application/json" -d '{"active": false}'
+
+# Veto ON/OFF
+curl -s -X POST http://20.124.180.8:8501/api/control/veto \
+  -H "Content-Type: application/json" -d '{"active": true, "reason": "reviewing"}'
+
+# Portfolio
+curl -s http://20.124.180.8:8501/api/control/portfolio-summary | python3 -m json.tool
+
+# GSS Signal
+curl -s http://20.124.180.8:8501/api/control/gss-signal | python3 -m json.tool
+
+# Execution mode change
+curl -s -X POST http://20.124.180.8:8501/api/execution-mode \
+  -H "Content-Type: application/json" -d '{"strategy": "day_trade", "mode": "manual"}'
+```
+
+### Command Mapping (when Moses says → what to run)
+| User Says | Command |
+|-----------|---------|
+| "status" / "how's sentinel" / "check gs" | gs_control.py status |
+| "portfolio" / "positions" / "P&L" | gs_control.py portfolio |
+| "gss" / "signal" / "what's the signal" | gs_control.py gss |
+| "kill" / "emergency stop" / "halt everything" | gs_control.py kill |
+| "resume" / "unkill" / "restart trading" | gs_control.py unkill |
+| "veto" / "pause trades" / "stop drafts" | gs_control.py veto |
+| "clear veto" / "unveto" | gs_control.py unveto |
+| "go manual" / "switch to manual" | gs_control.py mode manual |
+| "go auto" / "switch to auto" | gs_control.py mode auto |
+| "alerts" / "what's happening" | gs_control.py alerts |
+| "orders" / "execution log" | gs_control.py orders |
+| "scorecard" / "regime" | gs_control.py scorecard |
+| "refresh" / "update data" | gs_control.py refresh |
+| "dashboard" | Reply: http://20.124.180.8:8501 |
+
 ### Subagent Spawning for Sentinel Tasks
 When Moses asks about sentinel status or trading operations, spawn focused subagents:
 - `sentinel-health`: Run healthcheck, report mode, freshness, risk gate status
