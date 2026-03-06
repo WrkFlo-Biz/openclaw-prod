@@ -18,7 +18,8 @@ def patch_file(path: pathlib.Path, cookie_name: str) -> bool:
 
     needle = "let lastAuthFailure = null;\n\tconst token = getBearerToken(req);"
     if needle not in s:
-        raise RuntimeError(f"missing authorizeCanvasRequest needle in {path}")
+        print(f"openclaw canvas cookie auth: needle not found in {path}; skipping")
+        return False
 
     cookie_patch = "\n".join(
         [
@@ -42,7 +43,8 @@ def patch_file(path: pathlib.Path, cookie_name: str) -> bool:
         s,
     )
     if not m:
-        raise RuntimeError(f"missing canvas auth block in {path}")
+        print(f"openclaw canvas cookie auth: canvas auth block not found in {path}; skipping")
+        return False
     indent = m.group("indent")
 
     insert_lines = [
@@ -74,7 +76,8 @@ def patch_file(path: pathlib.Path, cookie_name: str) -> bool:
 
     needle2 = f"\n{indent}const ok = await authorizeCanvasRequest"
     if needle2 not in s:
-        raise RuntimeError(f"missing authorizeCanvasRequest callsite in {path}")
+        print(f"openclaw canvas cookie auth: callsite not found in {path}; skipping")
+        return False
 
     s = s.replace(needle2, "\n" + insert + indent + "const ok = await authorizeCanvasRequest", 1)
 
