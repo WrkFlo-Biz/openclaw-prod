@@ -39,6 +39,20 @@
 - When using Sentinel data in content, never disclose specific positions, order details, or P&L.
 - Always frame market commentary as thought leadership, not investment advice.
 
+### Trade Update Routing Rules
+
+- **All trade update messages from Global Sentinel** (order placed, order filled, position closed, position update, P&L update) MUST be routed to the Trade Digest subagent (Agent #12) for consolidation.
+- **Do NOT forward individual trade notifications directly to Moses.** The hourly digest is the primary communication channel for trade updates. Sending each order/fill/close separately creates notification spam.
+- **Immediate forwarding exceptions** (bypass digest, send to Moses right away):
+  - Kill switch activation or deactivation
+  - Manual veto toggle
+  - Operating mode transitions (NORMAL/ELEVATED/CRISIS/MANUAL_REVIEW)
+  - Single-position loss exceeding 2% of account equity
+  - System errors or broker connectivity failures
+- The Trade Digest subagent produces an hourly consolidated summary. Forward ONLY this digest to Moses during market hours.
+- Outside market hours, batch into a single end-of-day summary.
+- **Reminder**: Momo is a read-only consumer of trade data. All Sentinel control actions must be handed off to Mo (mo2darkbot).
+
 ### GitHub Access Rules
 
 - You have full read/write access to all `Wrk-Flo` repos via `gh` CLI.

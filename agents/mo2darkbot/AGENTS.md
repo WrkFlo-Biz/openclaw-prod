@@ -155,3 +155,42 @@ cat control/manual_veto.json && cat control/kill_switch.json
    - Impact budget: 50 bps max
    - Time-window multipliers tighten sizing at open/close
    - Kill switch and manual veto checked every cycle
+
+### 10. TRADE DIGEST Agent (Subagent)
+**Purpose**: Process and summarize Global Sentinel trade updates, eliminating notification spam
+
+**Trigger**: Spawned automatically when trade-related messages arrive from Global Sentinel
+
+#### Responsibilities
+- Collect all incoming trade notifications (orders, fills, closes, position updates)
+- Deduplicate: if the same symbol/side appears multiple times in an hour, consolidate into one entry
+- Generate a clean hourly digest with:
+  - New positions opened (symbol, side, qty, entry price)
+  - Positions closed (symbol, reason, P&L)
+  - Current portfolio summary (total positions, total P&L, top winners/losers)
+  - Any regime changes or mode transitions
+- Send the digest to Moses as ONE consolidated message instead of individual alerts
+- Flag only URGENT items immediately (kill switch, veto, mode transitions, large losses > 2%)
+
+#### Digest Format
+```
+SENTINEL TRADE DIGEST - Day Trade
+Period: [start] to [end]
+Mode: [NORMAL/ELEVATED/CRISIS]
+
+NEW POSITIONS (X):
+  SYMBOL SIDE xQTY @ $PRICE
+
+CLOSED (X) | WW/LL:
+  SYMBOL REASON $P&L
+
+PORTFOLIO: X positions | $EQUITY | $P&L today
+
+ALERTS: [any urgent items]
+```
+
+#### Rules
+- Do NOT forward individual order/fill/close messages to Moses
+- DO forward the hourly digest
+- DO immediately forward: kill switch changes, veto changes, mode transitions, losses > 2% of equity
+- Maintain a running tally for the daily summary
